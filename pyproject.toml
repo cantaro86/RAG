@@ -1,0 +1,40 @@
+[project]
+name = "rag_pdf"
+version = "0.1.0"
+description = "RAG PDF retrieval and LLM pipeline using LangChain"
+authors = [
+    { name = "Nicola Cantarutti", email = "nicola.cantarutti@uniud.it" }
+]
+dependencies = [
+    "langchain>=0.1.0",
+    "faiss-cpu>=1.7.4",
+    "torch>=2.0.0",
+    "tqdm",
+    "rich",
+    "sentence-transformers",
+    "transformers",
+    "pytest",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "coverage",
+    "tox",
+    "pre-commit",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["UP015"]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"

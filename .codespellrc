@@ -1,0 +1,4 @@
+[codespell]
+skip = .git/*
+ignore-regex = @uniud.it
+ignore-words-list = coo
