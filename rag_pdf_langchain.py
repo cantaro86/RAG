@@ -5,6 +5,9 @@ import os
 import sys
 from dataclasses import dataclass
 
+from . import _load_env as _  # noqa: F401
+from ._load_env import Config, cfg  # noqa: F401
+
 import faiss  # noqa: F401
 import torch
 from langchain.prompts import ChatPromptTemplate
@@ -25,8 +28,6 @@ from sentence_transformers import CrossEncoder
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-import load_env as _  # noqa: F401
-from load_env import Config, cfg
 
 # ------------------------
 # Console and device
@@ -140,7 +141,7 @@ def load_vectorstore(persist_dir: str, embed_model: str) -> FAISS:
 def build_retriever(vs: FAISS, k: int, rerank_model: str | None, k_reranked: int):
     base_retriever = vs.as_retriever(search_kwargs={"k": k})
     if rerank_model:
-        console.print(f"Using cross-encoder reranker (MPS): [bold]{rerank_model}[/bold]")
+        console.print(f"Using cross-encoder reranker ({DEVICE}): [bold]{rerank_model}[/bold]")
         cross_encoder = MPSSentenceCrossEncoder(rerank_model)
         compressor = CrossEncoderReranker(model=cross_encoder, top_n=k_reranked)
         retriever = ContextualCompressionRetriever(
@@ -221,10 +222,6 @@ def print_sources(docs: list[Document]):
 # Interactive loop
 # ------------------------
 def interactive_loop(cfg: Config):
-    # Set HF token
-    if getattr(cfg, "hf_token", None):
-        os.environ["HF_TOKEN"] = cfg.hf_token
-
     vs = load_vectorstore(cfg.persist_dir, cfg.embed_model)
     retriever = build_retriever(vs, cfg.k, None if cfg.no_rerank else cfg.rerank_model, cfg.k_reranked)
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
@@ -305,3 +302,10 @@ if __name__ == "__main__":
 # find faiss dimension to see if they can stay on cpu or gpu
 # what is the reranker?
 # do the debug
+
+# implement the context seguendo l'approccio di nvidia
+# replace no_rerank with rerank
+# remove class BuildConfig, usalo come annotation (vedi astrovascpy)
+# build_faiss_index non serve che funzioni sempre. Solo la prima volta.
+# In build_retriever cambia rerank_model
+# linea 163 controlla se la variabile env è definita e rimpiazzala con cfg

@@ -38,3 +38,4 @@ ignore = ["UP015"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+per-file-ignores = { "rag_pdf_langchain.py" = ["I001"] }
