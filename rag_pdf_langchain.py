@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import glob
 import os
-import sys
-from dataclasses import dataclass
 
-from . import _load_env as _  # noqa: F401
-from ._load_env import Config, cfg  # noqa: F401
+# from . import _load_env as _  # noqa: F401
+# from ._load_env import Config, cfg
+import _load_env as _  # noqa: F401
+from _load_env import Config, cfg
 
 import faiss  # noqa: F401
 import torch
+
 from langchain.prompts import ChatPromptTemplate
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain.retrievers.document_compressors import CrossEncoderReranker
@@ -84,53 +85,47 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
 # ------------------------
 # Build FAISS
 # ------------------------
-@dataclass
-class BuildConfig:
-    pdf_dir: str
-    persist_dir: str
-    embed_model: str
-    chunk_size: int = 1500
-    chunk_overlap: int = 200
 
 
-def build_faiss_index(cfg: BuildConfig) -> None:
+def build_faiss_index(cfg: Config) -> None:
     console.rule("[bold]Indexing PDFs -> FAISS")
     docs = load_pdfs(cfg.pdf_dir)
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
 
-    embedder = HuggingFaceEmbeddings(model_name=cfg.embed_model, encode_kwargs={"normalize_embeddings": True})
+    embedder = HuggingFaceEmbeddings(
+        model_name=cfg.embed_model,
+        encode_kwargs={"normalize_embeddings": True},
+        model_kwargs={"trust_remote_code": True},
+    )
     vs = FAISS.from_documents(chunks, embedder)
 
-    # try:
-    #     if faiss.get_num_gpus() > 0:
-    #         console.print(f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s). Moving index to GPU...[/green]")
-    #         res = faiss.StandardGpuResources()
-    #         vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
-    #     else:
-    #         console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
-    # except ImportError:
-    #     console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
-
-    os.makedirs(cfg.persist_dir, exist_ok=True)
-    vs.save_local(cfg.persist_dir)
-    console.print(f"Saved FAISS index to [bold]{cfg.persist_dir}[/bold]")
+    os.makedirs(cfg.index_dir, exist_ok=True)
+    vs.save_local(cfg.index_dir)
+    console.print(f"Saved FAISS index to [bold]{cfg.index_dir}[/bold]")
 
 
-def load_vectorstore(persist_dir: str, embed_model: str) -> FAISS:
-    embedder = HuggingFaceEmbeddings(model_name=embed_model, encode_kwargs={"normalize_embeddings": True})
-    vs = FAISS.load_local(persist_dir, embedder, allow_dangerous_deserialization=True)
+def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
+    embedder = HuggingFaceEmbeddings(
+        model_name=cfg.embed_model,
+        encode_kwargs={"normalize_embeddings": True},
+        model_kwargs={"trust_remote_code": True},
+    )
+    vs = FAISS.load_local(index_dir, embedder, allow_dangerous_deserialization=True)
 
-    # try:
-    #     if faiss.get_num_gpus() > 0:
-    #         console.print(f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).\
-    #         Moving loaded index to GPU...[/green]")
-    #         res = faiss.StandardGpuResources()
-    #         vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
-    #     else:
-    #         console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
-    # except ImportError:
-    #     console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
+    try:
+        if faiss.get_num_gpus() > 0:
+            console.print(
+                f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).\
+            Moving loaded index to GPU...[/green]"
+            )
+            res = faiss.StandardGpuResources()
+            res.setTempMemory(128 * 1024 * 1024)  # 128 MB scratch space
+            vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
+        else:
+            console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
+    except ImportError:
+        console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
 
     return vs
 
@@ -222,8 +217,8 @@ def print_sources(docs: list[Document]):
 # Interactive loop
 # ------------------------
 def interactive_loop(cfg: Config):
-    vs = load_vectorstore(cfg.persist_dir, cfg.embed_model)
-    retriever = build_retriever(vs, cfg.k, None if cfg.no_rerank else cfg.rerank_model, cfg.k_reranked)
+    vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
+    retriever = build_retriever(vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked)
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
     console.print("[bold green]Interactive RAG. Type 'exit' to quit.[/bold green]")
@@ -234,7 +229,7 @@ def interactive_loop(cfg: Config):
         except (EOFError, KeyboardInterrupt):
             print()
             break
-        if question.strip().lower() in {"exit", "quit", ":q"}:
+        if question.strip().lower() in {"exit", "quit", "q"}:
             break
 
         docs = retriever.invoke(question)
@@ -251,38 +246,25 @@ def interactive_loop(cfg: Config):
 
 
 def main():
-    # cfg = load_env.cfg
     console.print(f"Using HF cache dir: [bold]{cfg.hf_home}[/bold]")
-
-    # Set HF token if provided
-    if getattr(cfg, "hf_token", None):
-        os.environ["HF_TOKEN"] = cfg.hf_token
 
     # Rebuild FAISS index if requested
     if getattr(cfg, "reindex", False):
-        build_faiss_index(
-            BuildConfig(
-                pdf_dir=cfg.pdf_dir,
-                persist_dir=cfg.persist_dir,
-                embed_model=cfg.embed_model,
-                chunk_size=cfg.chunk_size,
-                chunk_overlap=cfg.chunk_overlap,
-            )
-        )
+        build_faiss_index(cfg)
 
     # Ensure FAISS index exists
-    if not os.path.isdir(cfg.persist_dir):
+    if not os.path.isdir(cfg.index_dir) or not os.listdir(cfg.index_dir):
         console.print(
-            f"[red]FAISS index not found at {cfg.persist_dir}. Set 'reindex: true' in config.yaml to build it.[/red]"
+            f"[red]FAISS index not found or empty at {cfg.index_dir}. "
+            "Set 'reindex: true' in config.yaml to build it.[/red]"
         )
-        sys.exit(1)
 
     # Decide whether to run interactive chat or single query
     if getattr(cfg, "chat", False):
         interactive_loop(cfg)
     elif getattr(cfg, "query", None):
-        vs = load_vectorstore(cfg.persist_dir, cfg.embed_model)
-        retriever = build_retriever(vs, cfg.k, None if cfg.no_rerank else cfg.rerank_model, cfg.k_reranked)
+        vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
+        retriever = build_retriever(vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked)
         llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
         docs = retriever.invoke(cfg.query)
@@ -299,13 +281,6 @@ if __name__ == "__main__":
     main()
 
 
-# find faiss dimension to see if they can stay on cpu or gpu
-# what is the reranker?
-# do the debug
-
-# implement the context seguendo l'approccio di nvidia
-# replace no_rerank with rerank
-# remove class BuildConfig, usalo come annotation (vedi astrovascpy)
-# build_faiss_index non serve che funzioni sempre. Solo la prima volta.
-# In build_retriever cambia rerank_model
-# linea 163 controlla se la variabile env è definita e rimpiazzala con cfg
+# implement the context window seguendo l'approccio di nvidia
+# compare faiss with SKLearnVectorStore, InMemoryVectorStore and others
+# what are good values for chunk size and overlap?
