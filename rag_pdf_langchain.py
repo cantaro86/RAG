@@ -113,19 +113,20 @@ def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
     )
     vs = FAISS.load_local(index_dir, embedder, allow_dangerous_deserialization=True)
 
-    try:
-        if faiss.get_num_gpus() > 0:
-            console.print(
-                f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).\
-            Moving loaded index to GPU...[/green]"
-            )
-            res = faiss.StandardGpuResources()
-            res.setTempMemory(128 * 1024 * 1024)  # 128 MB scratch space
-            vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
-        else:
-            console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
-    except ImportError:
-        console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
+    if getattr(cfg, "use_gpu_index", False):
+        try:
+            if faiss.get_num_gpus() > 0:
+                console.print(
+                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).\
+                Moving loaded index to GPU...[/green]"
+                )
+                res = faiss.StandardGpuResources()
+                res.setTempMemory(128 * 1024 * 1024)  # 128 MB scratch space
+                vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
+            else:
+                console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
+        except ImportError:
+            console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
 
     return vs
 
@@ -262,19 +263,10 @@ def main():
     # Decide whether to run interactive chat or single query
     if getattr(cfg, "chat", False):
         interactive_loop(cfg)
-    elif getattr(cfg, "query", None):
-        vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
-        retriever = build_retriever(vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked)
-        llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
-
-        docs = retriever.invoke(cfg.query)
-        print_sources(docs)
-        ctx = format_docs(docs)
-        prompt = RAG_PROMPT.format_messages(question=cfg.query, context=ctx)
-        answer = llm.invoke(prompt)
-        console.print(f"\n[bold]Answer[/bold]:\n{answer}")
+    elif getattr(cfg, "web", None):
+        pass
     else:
-        console.print("[yellow]Nothing to do. Set 'chat: true' or provide 'query' in config.yaml.[/yellow]")
+        console.print("[yellow]Nothing to do. Set 'chat: true' or provide 'web: true' in config.yaml.[/yellow]")
 
 
 if __name__ == "__main__":
