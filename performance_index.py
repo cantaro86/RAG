@@ -114,9 +114,9 @@ def main():
     # Hardcode your settings or read from config.yaml
     REPEAT = 20
     index_dir = "faiss_index"
-    embed_model = (
-        "nomic-ai/nomic-embed-text-v1.5"  # "BAAI/bge-small-en-v1.5" # "sentence-transformers/all-MiniLM-L6-v2"
-    )
+    embed_model = "intfloat/multilingual-e5-base"
+    # "BAAI/bge-multilingual-gemma2"  # "BAAI/bge-small-en-v1.5" # "sentence-transformers/all-MiniLM-L6-v2"
+
     queries = [
         "What is quantum entanglement?",
         "Explain gradient descent.",

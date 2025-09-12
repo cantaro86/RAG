@@ -87,17 +87,21 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
 # ------------------------
 
 
+def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
+    return HuggingFaceEmbeddings(
+        model_name=model_name,
+        encode_kwargs={"normalize_embeddings": True},
+        model_kwargs={"trust_remote_code": True},
+    )
+
+
 def build_faiss_index(cfg: Config) -> None:
     console.rule("[bold]Indexing PDFs -> FAISS")
     docs = load_pdfs(cfg.pdf_dir)
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
 
-    embedder = HuggingFaceEmbeddings(
-        model_name=cfg.embed_model,
-        encode_kwargs={"normalize_embeddings": True},
-        model_kwargs={"trust_remote_code": True},
-    )
+    embedder = build_embedder(cfg.embed_model)
     vs = FAISS.from_documents(chunks, embedder)
 
     os.makedirs(cfg.index_dir, exist_ok=True)
@@ -106,19 +110,14 @@ def build_faiss_index(cfg: Config) -> None:
 
 
 def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
-    embedder = HuggingFaceEmbeddings(
-        model_name=cfg.embed_model,
-        encode_kwargs={"normalize_embeddings": True},
-        model_kwargs={"trust_remote_code": True},
-    )
+    embedder = build_embedder(embed_model)
     vs = FAISS.load_local(index_dir, embedder, allow_dangerous_deserialization=True)
 
     if getattr(cfg, "use_gpu_index", False):
         try:
             if faiss.get_num_gpus() > 0:
                 console.print(
-                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).\
-                Moving loaded index to GPU...[/green]"
+                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).Moving loaded index to GPU...[/green]"
                 )
                 res = faiss.StandardGpuResources()
                 res.setTempMemory(128 * 1024 * 1024)  # 128 MB scratch space
@@ -153,14 +152,20 @@ def build_retriever(vs: FAISS, k: int, rerank_model: str | None, k_reranked: int
 # LLM pipeline
 # ------------------------
 def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> HuggingFacePipeline:
+    """
+    Build a HuggingFace LLM pipeline.
+    """
     console.print(f"Loading LLM: [bold]{model_name}[/bold] on device [bold]{DEVICE}[/bold]")
+
     tok = AutoTokenizer.from_pretrained(model_name, token=os.environ.get("HF_TOKEN"))
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         token=os.environ.get("HF_TOKEN"),
-        torch_dtype=torch.float16 if DEVICE in ("cuda", "mps") else torch.float32,
         device_map="auto",
+        torch_dtype=torch.float16 if DEVICE in ("cuda", "mps") else torch.float32,
     )
+
     if DEVICE == "mps":
         model.to("mps")
 
