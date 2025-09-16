@@ -281,3 +281,8 @@ if __name__ == "__main__":
 # implement the context window seguendo l'approccio di nvidia
 # compare faiss with SKLearnVectorStore, InMemoryVectorStore and others
 # what are good values for chunk size and overlap?
+
+# Inserisci il prompt per dire di rispondere in italiano
+# controlla github nvidia rag
+
+# https://developer.nvidia.com/blog/tips-for-building-a-rag-pipeline-with-nvidia-ai-langchain-ai-endpoints/
