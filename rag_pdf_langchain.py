@@ -22,6 +22,7 @@ from langchain_community.cross_encoders.base import BaseCrossEncoder
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
+from langdetect import detect
 from rich import print
 from rich.console import Console
 from rich.table import Table as RichTable
@@ -69,6 +70,11 @@ def load_pdfs(pdf_dir: str) -> list[Document]:
         for d in ds:
             d.metadata = d.metadata or {}
             d.metadata["source"] = p
+            try:
+                lang = detect(d.page_content)
+            except Exception:
+                lang = "unknown"
+            d.metadata["language"] = lang
         docs.extend(ds)
     return docs
 
@@ -79,7 +85,14 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", " ", ""],
     )
-    return splitter.split_documents(docs)
+    chunks = splitter.split_documents(docs)
+    keywords = ["recommend", "raccomanda"]
+    for chunk in chunks:
+        if any(word in chunk.page_content.lower() for word in keywords):
+            chunk.metadata["section"] = "Recommendation"
+        else:
+            chunk.metadata["section"] = "main"
+    return chunks
 
 
 # ------------------------
@@ -198,8 +211,12 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def format_docs(docs: list[Document]) -> str:
+    # Prioritize Recommendation sections. This happens after the retrieved part
+    recs = [d for d in docs if d.metadata.get("section") == "Recommendation"]
+    others = [d for d in docs if d.metadata.get("section") != "Recommendation"]
+    ordered = recs + others
     parts = []
-    for d in docs:
+    for d in ordered:
         src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
         page = d.metadata.get("page", "?")
         parts.append(f"[source: {src} p.{page}]\n{d.page_content}")
