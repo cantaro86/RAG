@@ -79,19 +79,33 @@ def load_pdfs(pdf_dir: str) -> list[Document]:
     return docs
 
 
+def preprocess_docs(docs: list[Document]) -> list[Document]:
+    """Truncate at the last 'References' if present (usually at the end of papers)."""
+    for doc in docs:
+        content = doc.page_content
+        idx = content.lower().rfind("references")
+        if idx != -1:
+            doc.page_content = content[:idx]
+    return docs
+
+
 def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> list[Document]:
+    docs = preprocess_docs(docs)  # Truncate at "References"
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", " ", ""],
     )
     chunks = splitter.split_documents(docs)
+    # Tag sections
     keywords = ["recommend", "raccomanda"]
     for chunk in chunks:
         if any(word in chunk.page_content.lower() for word in keywords):
             chunk.metadata["section"] = "Recommendation"
         else:
             chunk.metadata["section"] = "main"
+    # Filter out short chunks
+    chunks = [c for c in chunks if len(c.page_content) > 200]
     return chunks
 
 
