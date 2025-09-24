@@ -30,6 +30,10 @@ from sentence_transformers import CrossEncoder
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
+from langchain_core.runnables import RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
+from langchain_community.document_transformers import LongContextReorder
+
 
 # ------------------------
 # Console and device
@@ -215,8 +219,8 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a precise research assistant. Answer the user's question using only the provided context. "
-            "If the answer isn't in the context, say you don't know. Cite sources as (source.pdf p. N). "
+            "You are a precise research assistant. Answer the user's question with the help of the provided context. "
+            "Cite sources as (source.pdf p. N), only if the information is in the context. "
             "Prefer bullet points for lists; be concise and avoid speculation.",
         ),
         ("human", "Question: {question}\n\nContext:\n{context}\n\nAnswer:"),
@@ -237,7 +241,7 @@ def format_docs(docs: list[Document]) -> str:
     return "\n\n".join(parts)
 
 
-def print_sources(docs: list[Document]):
+def print_sources(docs: list[Document]) -> list[Document]:
     table = RichTable(title="Top Context Chunks")
     table.add_column("#")
     table.add_column("Source")
@@ -248,6 +252,7 @@ def print_sources(docs: list[Document]):
         page = str(d.metadata.get("page", "?"))
         table.add_row(str(i), src, page, str(len(d.page_content)))
     console.print(table)
+    return docs
 
 
 # ------------------------
@@ -255,10 +260,33 @@ def print_sources(docs: list[Document]):
 # ------------------------
 def interactive_loop(cfg: Config):
     vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
-    retriever = build_retriever(vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked)
+    retriever = build_retriever(
+        vs,
+        cfg.k,
+        cfg.rerank_model if cfg.rerank else None,
+        cfg.k_reranked,
+    )
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
-    console.print("[bold green]Interactive RAG. Type 'exit' to quit.[/bold green]")
+    long_reorder = RunnableLambda(LongContextReorder().transform_documents)
+
+    chain = (
+        {
+            "context": (lambda x: x["question"])
+            | retriever
+            | long_reorder
+            | RunnableLambda(print_sources)
+            | RunnableLambda(format_docs),
+            "question": lambda x: x["question"],
+        }
+        | RAG_PROMPT
+        | llm
+        | StrOutputParser()
+    )
+
+    console.print("[bold green]Interactive RAG with memory. Type 'exit' to quit.[/bold green]")
+
+    session_id = "default"  # could be per-user if needed
 
     while True:
         try:
@@ -269,12 +297,12 @@ def interactive_loop(cfg: Config):
         if question.strip().lower() in {"exit", "quit", "q"}:
             break
 
-        docs = retriever.invoke(question)
-        print_sources(docs)
-        ctx = format_docs(docs)
-        prompt = RAG_PROMPT.format_messages(question=question, context=ctx)
-        answer = llm.invoke(prompt)
-        console.print(f"\n[bold]Answer[/bold]:\n{answer}")
+        # Invoke conversational chain with proper session_id
+        result = chain.invoke(
+            {"question": question},
+            config={"configurable": {"session_id": session_id}},
+        )
+        console.print(f"\n[bold]Answer[/bold]:\n{result}")
 
 
 # ------------------------
@@ -317,3 +345,6 @@ if __name__ == "__main__":
 # controlla github nvidia rag
 
 # https://developer.nvidia.com/blog/tips-for-building-a-rag-pipeline-with-nvidia-ai-langchain-ai-endpoints/
+
+# https://python.langchain.com/docs/how_to/message_history/
+# multitreading:  server _ client
