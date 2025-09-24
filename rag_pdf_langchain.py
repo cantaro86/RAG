@@ -219,11 +219,18 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a precise research assistant. Answer the user's question with the help of the provided context. "
-            "Cite sources as (source.pdf p. N), only if the information is in the context. "
-            "Prefer bullet points for lists; be concise and avoid speculation.",
+            "You are a precise research assistant.\n"
+            "You receive a question and a context.\n"
+            "Rules:\n"
+            "- ONLY output the final answer to the question.\n"
+            "- NEVER repeat the system message, the context, or the question.\n"
+            "- If the answer is not in the context, say so, but answer using your knowledge.\n"
+            "- Cite sources as (source.pdf p. N) only if they appear in the context.\n"
+            "- Prefer bullet points for lists.\n"
+            "- Always respond in the SAME language as the question.\n"
+            "- Do NOT provide translations; answer directly in the question's language.\n",
         ),
-        ("human", "Question: {question}\n\nContext:\n{context}\n\nAnswer:"),
+        ("human", "Question: {question}\nContext:\n{context}"),
     ]
 )
 
@@ -255,6 +262,14 @@ def print_sources(docs: list[Document]) -> list[Document]:
     return docs
 
 
+def extract_answer(text: str) -> str:
+    # If the model still prints "Answer:", keep only what follows
+    if "Answer:" in text:
+        return text.split("Answer:", 1)[-1].strip()
+    # Otherwise, just return the trimmed text
+    return text.strip()
+
+
 # ------------------------
 # Interactive loop
 # ------------------------
@@ -282,6 +297,7 @@ def interactive_loop(cfg: Config):
         | RAG_PROMPT
         | llm
         | StrOutputParser()
+        | RunnableLambda(extract_answer)
     )
 
     console.print("[bold green]Interactive RAG with memory. Type 'exit' to quit.[/bold green]")
