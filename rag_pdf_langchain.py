@@ -34,6 +34,10 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_transformers import LongContextReorder
 
+from faiss import IndexFlatL2
+from langchain_community.docstore.in_memory import InMemoryDocstore
+from langchain_core.runnables.passthrough import RunnableAssign
+from operator import itemgetter
 
 # ------------------------
 # Console and device
@@ -230,9 +234,26 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
             "- Always respond in the SAME language as the question.\n"
             "- Do NOT provide translations; answer directly in the question's language.\n",
         ),
-        ("human", "Question: {question}\nContext:\n{context}"),
+        ("user", "Question: {input}\n\nConversation History:\n{history}\n\nDocument Context:\n{context}"),
     ]
 )
+
+
+def default_FAISS(embedder, embed_dims: int) -> FAISS:
+    """Utility for making an empty FAISS vectorstore"""
+    return FAISS(
+        embedding_function=embedder,
+        index=IndexFlatL2(embed_dims),
+        docstore=InMemoryDocstore(),
+        index_to_docstore_id={},
+        normalize_L2=False,
+    )
+
+
+def save_memory_and_get_output(d, vstore):
+    """Saves interaction to convstore and returns only the output"""
+    vstore.add_texts([f"User: {d.get('input')}", f"Assistant: {d.get('output')}"])
+    return d.get("output")
 
 
 def format_docs(docs: list[Document]) -> str:
@@ -270,6 +291,17 @@ def extract_answer(text: str) -> str:
     return text.strip()
 
 
+def docs2str(docs, title="Document"):
+    """Useful utility for making chunks into context string. Optional, but useful"""
+    out_str = ""
+    for doc in docs:
+        doc_name = getattr(doc, "metadata", {}).get("Title", title)
+        if doc_name:
+            out_str += f"[Quote from {doc_name}] "
+        out_str += getattr(doc, "page_content", str(doc)) + "\n"
+    return out_str
+
+
 # ------------------------
 # Interactive loop
 # ------------------------
@@ -283,17 +315,22 @@ def interactive_loop(cfg: Config):
     )
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
+    embedder = build_embedder(cfg.embed_model)
+    embed_dims = len(embedder.embed_query("test"))
+    convstore = default_FAISS(embedder, embed_dims)
+
     long_reorder = RunnableLambda(LongContextReorder().transform_documents)
 
+    retrieval_chain = (
+        {"input": lambda x: x if isinstance(x, str) else x["input"]}
+        | RunnableAssign({"history": itemgetter("input") | convstore.as_retriever() | long_reorder | docs2str})
+        | RunnableAssign({"context": itemgetter("input") | retriever | long_reorder | docs2str})
+    )
+
     chain = (
-        {
-            "context": (lambda x: x["question"])
-            | retriever
-            | long_reorder
-            | RunnableLambda(print_sources)
-            | RunnableLambda(format_docs),
-            "question": lambda x: x["question"],
-        }
+        retrieval_chain
+        # | RunnableLambda(format_docs)
+        # | RunnableLambda(print_sources)
         | RAG_PROMPT
         | llm
         | StrOutputParser()
@@ -302,7 +339,12 @@ def interactive_loop(cfg: Config):
 
     console.print("[bold green]Interactive RAG with memory. Type 'exit' to quit.[/bold green]")
 
-    session_id = "default"  # could be per-user if needed
+    def chat_once(message: str):
+        """Single-turn Q&A, with FAISS memory + doc retrieval"""
+        retrieval = retrieval_chain.invoke(message)  # get history + context
+        answer = chain.invoke(retrieval)  # run pipeline
+        save_memory_and_get_output({"input": message, "output": answer}, convstore)
+        return answer
 
     while True:
         try:
@@ -314,10 +356,7 @@ def interactive_loop(cfg: Config):
             break
 
         # Invoke conversational chain with proper session_id
-        result = chain.invoke(
-            {"question": question},
-            config={"configurable": {"session_id": session_id}},
-        )
+        result = chat_once(question)
         console.print(f"\n[bold]Answer[/bold]:\n{result}")
 
 
