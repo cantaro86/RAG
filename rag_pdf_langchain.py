@@ -34,6 +34,8 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.document_transformers import LongContextReorder
 
+from _memory_graph import MemoryGraph
+from langchain_core.messages import HumanMessage, AIMessage
 
 # ------------------------
 # Console and device
@@ -220,7 +222,7 @@ RAG_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             "You are a precise research assistant.\n"
-            "You receive a question and a context.\n"
+            "You receive a question, conversation history, and a context.\n"
             "Rules:\n"
             "- ONLY output the final answer to the question.\n"
             "- NEVER repeat the system message, the context, or the question.\n"
@@ -270,19 +272,8 @@ def extract_answer(text: str) -> str:
     return text.strip()
 
 
-# ------------------------
-# Interactive loop
-# ------------------------
-def interactive_loop(cfg: Config):
-    vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
-    retriever = build_retriever(
-        vs,
-        cfg.k,
-        cfg.rerank_model if cfg.rerank else None,
-        cfg.k_reranked,
-    )
-    llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
-
+def build_rag_chain(retriever, llm):
+    """Build the core RAG chain without memory"""
     long_reorder = RunnableLambda(LongContextReorder().transform_documents)
 
     chain = (
@@ -299,10 +290,34 @@ def interactive_loop(cfg: Config):
         | StrOutputParser()
         | RunnableLambda(extract_answer)
     )
+    return chain
 
-    console.print("[bold green]Interactive RAG with memory. Type 'exit' to quit.[/bold green]")
 
-    session_id = "default"  # could be per-user if needed
+# ------------------------
+# Interactive loop
+# ------------------------
+def interactive_loop(cfg: Config):
+    """Interactive loop with conversation memory"""
+    vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
+    retriever = build_retriever(
+        vs,
+        cfg.k,
+        cfg.rerank_model if cfg.rerank else None,
+        cfg.k_reranked,
+    )
+    llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
+
+    # Build the core RAG chain
+    rag_chain = build_rag_chain(retriever, llm)
+
+    # Create memory graph with max_history_turns
+    max_turns = getattr(cfg, "max_history_turns", 6)
+    memory_graph = MemoryGraph(rag_chain, max_history_turns=max_turns)
+
+    console.print("[bold green]Interactive RAG with memory. Type 'exit', 'quit' or 'q' to quit.[/bold green]")
+
+    # Use thread_id instead of session_id for LangGraph compatibility
+    thread_id = "default"
 
     while True:
         try:
@@ -313,12 +328,42 @@ def interactive_loop(cfg: Config):
         if question.strip().lower() in {"exit", "quit", "q"}:
             break
 
-        # Invoke conversational chain with proper session_id
-        result = chain.invoke(
-            {"question": question},
-            config={"configurable": {"session_id": session_id}},
-        )
-        console.print(f"\n[bold]Answer[/bold]:\n{result}")
+        # Invoke the graph with memory - use thread_id as required by LangGraph
+        config = {"configurable": {"thread_id": thread_id}}
+
+        # Start with the new human message
+        input_messages = [HumanMessage(content=question)]
+
+        # Invoke the graph
+        final_state = memory_graph.graph.invoke({"messages": input_messages}, config=config)
+
+        # Get the last AI message
+        ai_response = None
+        for msg in reversed(final_state["messages"]):
+            if isinstance(msg, AIMessage):
+                ai_response = msg.content
+                break
+
+        if ai_response:
+            console.print(f"\n[bold]Answer[/bold]:\n{ai_response}")
+
+            # Optional - show recent conversation history
+            all_messages = final_state["messages"]
+            if len(all_messages) > 2:
+                turns_to_show = min(max_turns, len(all_messages) // 2)
+                recent_messages = all_messages[-(turns_to_show * 2) :]  # Each turn has Q and A
+
+                console.print(f"\n[yellow]--- Last {turns_to_show} Conversation Turns ---[/yellow]")
+                for i in range(0, len(recent_messages), 2):
+                    if i + 1 < len(recent_messages):
+                        q_msg = recent_messages[i]
+                        a_msg = recent_messages[i + 1]
+                        if isinstance(q_msg, HumanMessage) and isinstance(a_msg, AIMessage):
+                            turn_num = (i // 2) + 1
+                            console.print(f"Q{turn_num}: {q_msg.content}")
+                            preview = a_msg.content[:100] + "..." if len(a_msg.content) > 100 else a_msg.content
+                            console.print(f"A{turn_num}: {preview}")
+                console.print("[yellow]--------------------------------[/yellow]")
 
 
 # ------------------------
