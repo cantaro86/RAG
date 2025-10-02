@@ -28,12 +28,11 @@ from sentence_transformers import CrossEncoder
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.prebuilt import ToolNode
 
 # ------------------------
 # Console and device
@@ -267,33 +266,40 @@ def create_retriever_tool(retriever):
 # ------------------------
 SYSTEM_PROMPT = """You are a helpful research assistant with access to a document database.
 
-You have access to a tool called 'search_documents' that searches PDF documents.
+You can search PDF documents when needed, but many questions can be answered directly.
 
-**When to use the tool:**
-- When the user asks about specific information that would be in documents
-- When you need factual information from research papers or documents
-- When the user explicitly asks about content from PDFs
+**CRITICAL: Choose ONE of these two options:**
 
-**When NOT to use the tool:**
-- For general knowledge questions you can answer directly
-- For greetings, small talk, or conversation
-- For questions about yourself or your capabilities
-- For follow-up questions where you already have the context from previous tool calls
+Option A - Search documents (use ONLY when information is likely in the PDFs):
+Output EXACTLY: TOOL_CALL: search_documents("your query")
+Nothing else. No explanation. Just that one line.
 
-**Important rules:**
-1. Always respond in the SAME language as the user's question
-2. Be concise and direct in your answers
-3. When using the tool, cite sources as (filename.pdf p.N)
-4. If you use the tool and don't find relevant information, say so and offer what you know
-5. Remember the conversation history - don't re-search for information you already have
+Option B - Answer directly (use for general knowledge, greetings, follow-ups):
+Provide your answer directly. Do NOT mention tools or searching.
 
-Think carefully about whether you need to search documents before responding."""
+**When to search documents:**
+- Specific information about research studies, papers, or technical details
+- User explicitly asks about document content
+- Information is specialized/domain-specific
+
+**When to answer directly:**
+- General knowledge (e.g., "What is the capital of France?")
+- Greetings, small talk, clarifications
+- Math, programming, common facts
+- Follow-up questions when you already have context
+
+**Rules:**
+1. Respond in the SAME language as the question
+2. Be concise and direct
+3. When using search results, cite as (filename.pdf p.N)
+4. NEVER output both a tool call AND an answer
+5. NEVER explain your reasoning - just output the tool call OR the answer"""
 
 
 def format_chat_history(messages: Sequence[BaseMessage], max_turns: int = 6) -> str:
     """Format recent chat history for the prompt"""
     # Filter out system messages and tool messages for history
-    chat_messages = [m for m in messages if isinstance(m, HumanMessage | AIMessage)]
+    chat_messages = [m for m in messages if isinstance(m, (HumanMessage | AIMessage))]
 
     # Keep only recent turns
     recent = chat_messages[-(max_turns * 2) :]
@@ -313,44 +319,176 @@ def format_chat_history(messages: Sequence[BaseMessage], max_turns: int = 6) -> 
 # ------------------------
 # Agent Nodes
 # ------------------------
-def create_agent_node(llm, tools):
-    """Create the agent node that decides whether to use tools or respond directly"""
+def parse_tool_call(text: str) -> tuple[bool, str, str]:
+    """Parse tool call from LLM output
 
-    # Bind tools to LLM
-    llm_with_tools = llm.bind_tools(tools)
+    Returns:
+        (has_tool_call, tool_name, query)
+    """
+    # Check for tool call pattern
+    if "TOOL_CALL:" in text:
+        try:
+            # Extract just the tool call line, ignore everything else
+            lines = text.split("\n")
+            tool_line = None
+            for line in lines:
+                if "TOOL_CALL:" in line:
+                    tool_line = line.strip()
+                    break
+
+            if tool_line:
+                import re
+
+                # Match: TOOL_CALL: search_documents("query")
+                match = re.search(r'TOOL_CALL:\s*(\w+)\s*\("([^"]+)"\)', tool_line)
+                if match:
+                    tool_name = match.group(1)
+                    query = match.group(2)
+                    return True, tool_name, query
+        except Exception:
+            pass
+    return False, "", ""
+
+
+def clean_llm_output(text: str) -> str:
+    """Clean LLM output to remove any meta-commentary or reasoning"""
+    # Remove common meta-patterns
+    text = text.strip()
+
+    # If it starts with meta-commentary, try to extract just the answer
+    if any(phrase in text.lower() for phrase in ["assessment:", "answer:", "final answer:", "provide your"]):
+        # Try to find the actual answer after these markers
+        lines = text.split("\n")
+        answer_lines = []
+        skip = False
+
+        for line in lines:
+            lower_line = line.lower()
+            # Skip meta-commentary lines
+            if any(
+                phrase in lower_line
+                for phrase in ["assessment:", "human:", "search results:", "provide your", "after receiving", "i will"]
+            ):
+                skip = True
+                continue
+            # Start capturing after "answer:" marker
+            if "answer:" in lower_line and "tool_call" not in lower_line:
+                skip = False
+                # Get text after "answer:"
+                if ":" in line:
+                    line = line.split(":", 1)[1].strip()
+                if line:
+                    answer_lines.append(line)
+                continue
+
+            if not skip and line.strip():
+                answer_lines.append(line)
+
+        if answer_lines:
+            return "\n".join(answer_lines)
+
+    return text
+
+
+def create_agent_node(llm, retriever):
+    """Create the agent node that decides whether to use tools or respond directly"""
 
     def agent(state: AgentState) -> AgentState:
         messages = state["messages"]
 
-        # Get the last user message
+        # Get the last message
         last_message = messages[-1]
 
-        # Build prompt with system message and history
+        # If it's a ToolMessage, we're getting results back from tool execution
+        if isinstance(last_message, ToolMessage):
+            # Generate final answer based on tool results
+            history = format_chat_history(messages[:-2])  # Exclude tool message and its trigger
+
+            # Get the original question
+            original_question = None
+            for msg in reversed(messages[:-1]):
+                if isinstance(msg, HumanMessage):
+                    original_question = msg.content
+                    break
+
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "You are a helpful research assistant. Use the provided search results to answer the question."
+                        "Cite sources as (filename.pdf p.N). "
+                        "Be concise and direct. Respond in the same language as the question.",
+                    ),
+                    (
+                        "human",
+                        f"Question: {original_question}\n\nSearch results:\n{last_message.content}."
+                        "Provide a clear, direct answer:",
+                    ),
+                ]
+            )
+
+            formatted = prompt.format_messages()
+            response_text = llm.invoke(formatted)
+            response_text = clean_llm_output(response_text)
+
+            return {"messages": [AIMessage(content=response_text)]}
+
+        # Otherwise, process user question
         history = format_chat_history(messages[:-1])
+
+        user_query = last_message.content
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", SYSTEM_PROMPT),
-                ("human", f"Previous conversation:\n{history}\n\nCurrent question: {last_message.content}"),
+                ("human", f"Previous conversation:\n{history}\n\nQuestion: {user_query}\n\nYour response:"),
             ]
         )
 
         # Invoke LLM
         formatted = prompt.format_messages()
-        response = llm_with_tools.invoke(formatted)
+        response_text = llm.invoke(formatted)
 
-        return {"messages": [response]}
+        # Check if LLM wants to use a tool
+        has_tool, tool_name, query = parse_tool_call(response_text)
+
+        if has_tool and tool_name == "search_documents":
+            # Execute tool
+            console.print(f"[yellow]→ Searching documents: '{query}'[/yellow]")
+
+            docs = retriever.invoke(query)
+
+            # Print sources table
+            table = RichTable(title="Retrieved Documents")
+            table.add_column("#")
+            table.add_column("Source")
+            table.add_column("Page")
+            table.add_column("Chars")
+            for i, d in enumerate(docs, 1):
+                src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
+                page = str(d.metadata.get("page", "?"))
+                table.add_row(str(i), src, page, str(len(d.page_content)))
+            console.print(table)
+
+            tool_result = format_docs_for_tool(docs)
+
+            # Return tool message
+            return {"messages": [ToolMessage(content=tool_result, tool_call_id="search_docs")]}
+
+        # No tool call, clean and return direct response
+        response_text = clean_llm_output(response_text)
+        return {"messages": [AIMessage(content=response_text)]}
 
     return agent
 
 
-def should_continue(state: AgentState) -> Literal["tools", "end"]:
-    """Determine if we should use tools or end"""
+def should_continue(state: AgentState) -> Literal["agent", "end"]:
+    """Determine if we should continue processing or end"""
     last_message = state["messages"][-1]
 
-    # If there are tool calls, route to tools
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
+    # If last message is a ToolMessage, we need to go back to agent to generate final answer
+    if isinstance(last_message, ToolMessage):
+        return "agent"
 
     # Otherwise end
     return "end"
@@ -362,27 +500,18 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
 def build_agent_graph(llm, retriever):
     """Build the LangGraph agent with tools"""
 
-    # Create tools
-    search_tool = create_retriever_tool(retriever)
-    tools = [search_tool]
-
-    # Create tool node
-    tool_node = ToolNode(tools)
-
     # Create agent node
-    agent_node = create_agent_node(llm, tools)
+    agent_node = create_agent_node(llm, retriever)
 
     # Build graph
     workflow = StateGraph(AgentState)
 
     # Add nodes
     workflow.add_node("agent", agent_node)
-    workflow.add_node("tools", tool_node)
 
     # Add edges
     workflow.add_edge(START, "agent")
-    workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
-    workflow.add_edge("tools", "agent")
+    workflow.add_conditional_edges("agent", should_continue, {"agent": "agent", "end": END})
 
     # Compile with memory
     memory = MemorySaver()
@@ -425,6 +554,7 @@ def interactive_loop(cfg: Config):
 
         try:
             # Stream the agent's execution
+            final_response = None
             for event in agent.stream(
                 {"messages": [HumanMessage(content=question)]}, config=config, stream_mode="values"
             ):
@@ -432,9 +562,13 @@ def interactive_loop(cfg: Config):
                 if event["messages"]:
                     last_msg = event["messages"][-1]
 
-                    # Print AI responses (not tool calls)
-                    if isinstance(last_msg, AIMessage) and not last_msg.tool_calls:
-                        console.print(f"\n[bold]Assistant[/bold]: {last_msg.content}")
+                    # Save final AI response
+                    if isinstance(last_msg, AIMessage):
+                        final_response = last_msg.content
+
+            # Print final response
+            if final_response:
+                console.print(f"\n[bold]Assistant[/bold]: {final_response}")
 
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
