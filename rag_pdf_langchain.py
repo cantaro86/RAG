@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import glob
 import os
+from typing import Annotated, TypedDict, Literal
+from collections.abc import Sequence
 
-# from . import _load_env as _  # noqa: F401
-# from ._load_env import Config, cfg
 import _load_env as _  # noqa: F401
 from _load_env import Config, cfg
 
@@ -17,8 +17,6 @@ from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.cross_encoders.base import BaseCrossEncoder
-
-# LangChain imports
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings, HuggingFacePipeline
@@ -30,12 +28,12 @@ from sentence_transformers import CrossEncoder
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-from langchain_core.runnables import RunnableLambda
-from langchain_core.output_parsers import StrOutputParser
-from langchain_community.document_transformers import LongContextReorder
-
-from _memory_graph import MemoryGraph
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.tools import tool
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.prebuilt import ToolNode
 
 # ------------------------
 # Console and device
@@ -96,21 +94,19 @@ def preprocess_docs(docs: list[Document]) -> list[Document]:
 
 
 def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> list[Document]:
-    docs = preprocess_docs(docs)  # Truncate at "References"
+    docs = preprocess_docs(docs)
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
         separators=["\n\n", "\n", " ", ""],
     )
     chunks = splitter.split_documents(docs)
-    # Tag sections
     keywords = ["recommend", "raccomanda"]
     for chunk in chunks:
         if any(word in chunk.page_content.lower() for word in keywords):
             chunk.metadata["section"] = "Recommendation"
         else:
             chunk.metadata["section"] = "main"
-    # Filter out short chunks
     chunks = [c for c in chunks if len(c.page_content) > 200]
     return chunks
 
@@ -118,8 +114,6 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
 # ------------------------
 # Build FAISS
 # ------------------------
-
-
 def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
     return HuggingFaceEmbeddings(
         model_name=model_name,
@@ -150,10 +144,10 @@ def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
         try:
             if faiss.get_num_gpus() > 0:
                 console.print(
-                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s).Moving loaded index to GPU...[/green]"
+                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s). Moving loaded index to GPU...[/green]"
                 )
                 res = faiss.StandardGpuResources()
-                res.setTempMemory(128 * 1024 * 1024)  # 128 MB scratch space
+                res.setTempMemory(128 * 1024 * 1024)
                 vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
             else:
                 console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
@@ -185,9 +179,6 @@ def build_retriever(vs: FAISS, k: int, rerank_model: str | None, k_reranked: int
 # LLM pipeline
 # ------------------------
 def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> HuggingFacePipeline:
-    """
-    Build a HuggingFace LLM pipeline.
-    """
     console.print(f"Loading LLM: [bold]{model_name}[/bold] on device [bold]{DEVICE}[/bold]")
 
     tok = AutoTokenizer.from_pretrained(model_name, token=os.environ.get("HF_TOKEN"))
@@ -215,33 +206,21 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
 
 
 # ------------------------
-# Prompt
+# Agent State
 # ------------------------
-RAG_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are a precise research assistant.\n"
-            "You receive a question, conversation history, and a context.\n"
-            "Rules:\n"
-            "- ONLY output the final answer to the question.\n"
-            "- NEVER repeat the system message, the context, or the question.\n"
-            "- If the answer is not in the context, say so, but answer using your knowledge.\n"
-            "- Cite sources as (source.pdf p. N) only if they appear in the context.\n"
-            "- Prefer bullet points for lists.\n"
-            "- Always respond in the SAME language as the question.\n"
-            "- Do NOT provide translations; answer directly in the question's language.\n",
-        ),
-        ("human", "Question: {question}\nContext:\n{context}"),
-    ]
-)
+class AgentState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
-def format_docs(docs: list[Document]) -> str:
-    # Prioritize Recommendation sections. This happens after the retrieved part
+# ------------------------
+# Retriever Tool
+# ------------------------
+def format_docs_for_tool(docs: list[Document]) -> str:
+    """Format retrieved documents for the tool output"""
     recs = [d for d in docs if d.metadata.get("section") == "Recommendation"]
     others = [d for d in docs if d.metadata.get("section") != "Recommendation"]
     ordered = recs + others
+
     parts = []
     for d in ordered:
         src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
@@ -250,54 +229,171 @@ def format_docs(docs: list[Document]) -> str:
     return "\n\n".join(parts)
 
 
-def print_sources(docs: list[Document]) -> list[Document]:
-    table = RichTable(title="Top Context Chunks")
-    table.add_column("#")
-    table.add_column("Source")
-    table.add_column("Page")
-    table.add_column("Chars")
-    for i, d in enumerate(docs, 1):
-        src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
-        page = str(d.metadata.get("page", "?"))
-        table.add_row(str(i), src, page, str(len(d.page_content)))
-    console.print(table)
-    return docs
+def create_retriever_tool(retriever):
+    """Create a retriever tool that the agent can use"""
+
+    @tool
+    def search_documents(query: str) -> str:
+        """Search the document database for relevant information.
+        Use this tool when you need to find specific information from the PDF documents.
+
+        Args:
+            query: The search query to find relevant documents
+
+        Returns:
+            Relevant document excerpts with source citations
+        """
+        docs = retriever.invoke(query)
+
+        # Print sources table
+        table = RichTable(title="Retrieved Documents")
+        table.add_column("#")
+        table.add_column("Source")
+        table.add_column("Page")
+        table.add_column("Chars")
+        for i, d in enumerate(docs, 1):
+            src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
+            page = str(d.metadata.get("page", "?"))
+            table.add_row(str(i), src, page, str(len(d.page_content)))
+        console.print(table)
+
+        return format_docs_for_tool(docs)
+
+    return search_documents
 
 
-def extract_answer(text: str) -> str:
-    # If the model still prints "Answer:", keep only what follows
-    if "Answer:" in text:
-        return text.split("Answer:", 1)[-1].strip()
-    # Otherwise, just return the trimmed text
-    return text.strip()
+# ------------------------
+# Agent Prompts
+# ------------------------
+SYSTEM_PROMPT = """You are a helpful research assistant with access to a document database.
+
+You have access to a tool called 'search_documents' that searches PDF documents.
+
+**When to use the tool:**
+- When the user asks about specific information that would be in documents
+- When you need factual information from research papers or documents
+- When the user explicitly asks about content from PDFs
+
+**When NOT to use the tool:**
+- For general knowledge questions you can answer directly
+- For greetings, small talk, or conversation
+- For questions about yourself or your capabilities
+- For follow-up questions where you already have the context from previous tool calls
+
+**Important rules:**
+1. Always respond in the SAME language as the user's question
+2. Be concise and direct in your answers
+3. When using the tool, cite sources as (filename.pdf p.N)
+4. If you use the tool and don't find relevant information, say so and offer what you know
+5. Remember the conversation history - don't re-search for information you already have
+
+Think carefully about whether you need to search documents before responding."""
 
 
-def build_rag_chain(retriever, llm):
-    """Build the core RAG chain without memory"""
-    long_reorder = RunnableLambda(LongContextReorder().transform_documents)
+def format_chat_history(messages: Sequence[BaseMessage], max_turns: int = 6) -> str:
+    """Format recent chat history for the prompt"""
+    # Filter out system messages and tool messages for history
+    chat_messages = [m for m in messages if isinstance(m, HumanMessage | AIMessage)]
 
-    chain = (
-        {
-            "context": (lambda x: x["question"])
-            | retriever
-            | long_reorder
-            | RunnableLambda(print_sources)
-            | RunnableLambda(format_docs),
-            "question": lambda x: x["question"],
-        }
-        | RAG_PROMPT
-        | llm
-        | StrOutputParser()
-        | RunnableLambda(extract_answer)
-    )
-    return chain
+    # Keep only recent turns
+    recent = chat_messages[-(max_turns * 2) :]
+
+    history_parts = []
+    for msg in recent:
+        if isinstance(msg, HumanMessage):
+            history_parts.append(f"Human: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            # Skip tool calls in history display
+            if not msg.tool_calls:
+                history_parts.append(f"Assistant: {msg.content}")
+
+    return "\n".join(history_parts) if history_parts else "No previous conversation."
+
+
+# ------------------------
+# Agent Nodes
+# ------------------------
+def create_agent_node(llm, tools):
+    """Create the agent node that decides whether to use tools or respond directly"""
+
+    # Bind tools to LLM
+    llm_with_tools = llm.bind_tools(tools)
+
+    def agent(state: AgentState) -> AgentState:
+        messages = state["messages"]
+
+        # Get the last user message
+        last_message = messages[-1]
+
+        # Build prompt with system message and history
+        history = format_chat_history(messages[:-1])
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", SYSTEM_PROMPT),
+                ("human", f"Previous conversation:\n{history}\n\nCurrent question: {last_message.content}"),
+            ]
+        )
+
+        # Invoke LLM
+        formatted = prompt.format_messages()
+        response = llm_with_tools.invoke(formatted)
+
+        return {"messages": [response]}
+
+    return agent
+
+
+def should_continue(state: AgentState) -> Literal["tools", "end"]:
+    """Determine if we should use tools or end"""
+    last_message = state["messages"][-1]
+
+    # If there are tool calls, route to tools
+    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+        return "tools"
+
+    # Otherwise end
+    return "end"
+
+
+# ------------------------
+# Build Agent Graph
+# ------------------------
+def build_agent_graph(llm, retriever):
+    """Build the LangGraph agent with tools"""
+
+    # Create tools
+    search_tool = create_retriever_tool(retriever)
+    tools = [search_tool]
+
+    # Create tool node
+    tool_node = ToolNode(tools)
+
+    # Create agent node
+    agent_node = create_agent_node(llm, tools)
+
+    # Build graph
+    workflow = StateGraph(AgentState)
+
+    # Add nodes
+    workflow.add_node("agent", agent_node)
+    workflow.add_node("tools", tool_node)
+
+    # Add edges
+    workflow.add_edge(START, "agent")
+    workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
+    workflow.add_edge("tools", "agent")
+
+    # Compile with memory
+    memory = MemorySaver()
+    return workflow.compile(checkpointer=memory)
 
 
 # ------------------------
 # Interactive loop
 # ------------------------
 def interactive_loop(cfg: Config):
-    """Interactive loop with conversation memory"""
+    """Interactive loop with the agent"""
     vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
     retriever = build_retriever(
         vs,
@@ -307,16 +403,12 @@ def interactive_loop(cfg: Config):
     )
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
-    # Build the core RAG chain
-    rag_chain = build_rag_chain(retriever, llm)
+    # Build agent graph
+    agent = build_agent_graph(llm, retriever)
 
-    # Create memory graph with max_history_turns
-    max_turns = getattr(cfg, "max_history_turns", 6)
-    memory_graph = MemoryGraph(rag_chain, max_history_turns=max_turns)
+    console.print("[bold green]RAG Agent with Tools. Type 'exit', 'quit' or 'q' to quit.[/bold green]")
+    console.print("[yellow]The agent will decide when to search documents and when to respond directly.[/yellow]")
 
-    console.print("[bold green]Interactive RAG with memory. Type 'exit', 'quit' or 'q' to quit.[/bold green]")
-
-    # Use thread_id instead of session_id for LangGraph compatibility
     thread_id = "default"
 
     while True:
@@ -328,49 +420,29 @@ def interactive_loop(cfg: Config):
         if question.strip().lower() in {"exit", "quit", "q"}:
             break
 
-        # Invoke the graph with memory - use thread_id as required by LangGraph
+        # Invoke agent
         config = {"configurable": {"thread_id": thread_id}}
 
-        # Start with the new human message
-        input_messages = [HumanMessage(content=question)]
+        try:
+            # Stream the agent's execution
+            for event in agent.stream(
+                {"messages": [HumanMessage(content=question)]}, config=config, stream_mode="values"
+            ):
+                # Get the last message
+                if event["messages"]:
+                    last_msg = event["messages"][-1]
 
-        # Invoke the graph
-        final_state = memory_graph.graph.invoke({"messages": input_messages}, config=config)
+                    # Print AI responses (not tool calls)
+                    if isinstance(last_msg, AIMessage) and not last_msg.tool_calls:
+                        console.print(f"\n[bold]Assistant[/bold]: {last_msg.content}")
 
-        # Get the last AI message
-        ai_response = None
-        for msg in reversed(final_state["messages"]):
-            if isinstance(msg, AIMessage):
-                ai_response = msg.content
-                break
-
-        if ai_response:
-            console.print(f"\n[bold]Answer[/bold]:\n{ai_response}")
-
-            # Optional - show recent conversation history
-            all_messages = final_state["messages"]
-            if len(all_messages) > 2:
-                turns_to_show = min(max_turns, len(all_messages) // 2)
-                recent_messages = all_messages[-(turns_to_show * 2) :]  # Each turn has Q and A
-
-                console.print(f"\n[yellow]--- Last {turns_to_show} Conversation Turns ---[/yellow]")
-                for i in range(0, len(recent_messages), 2):
-                    if i + 1 < len(recent_messages):
-                        q_msg = recent_messages[i]
-                        a_msg = recent_messages[i + 1]
-                        if isinstance(q_msg, HumanMessage) and isinstance(a_msg, AIMessage):
-                            turn_num = (i // 2) + 1
-                            console.print(f"Q{turn_num}: {q_msg.content}")
-                            preview = a_msg.content[:100] + "..." if len(a_msg.content) > 100 else a_msg.content
-                            console.print(f"A{turn_num}: {preview}")
-                console.print("[yellow]--------------------------------[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
 
 
 # ------------------------
 # Main
 # ------------------------
-
-
 def main():
     console.print(f"Using HF cache dir: [bold]{cfg.hf_home}[/bold]")
 
@@ -384,28 +456,14 @@ def main():
             f"[red]FAISS index not found or empty at {cfg.index_dir}. "
             "Set 'reindex: true' in config.yaml to build it.[/red]"
         )
+        return
 
-    # Decide whether to run interactive chat or single query
+    # Run interactive chat
     if getattr(cfg, "chat", False):
         interactive_loop(cfg)
-    elif getattr(cfg, "web", None):
-        pass
     else:
-        console.print("[yellow]Nothing to do. Set 'chat: true' or provide 'web: true' in config.yaml.[/yellow]")
+        console.print("[yellow]Set 'chat: true' in config.yaml to start the agent.[/yellow]")
 
 
 if __name__ == "__main__":
     main()
-
-
-# implement the context window seguendo l'approccio di nvidia
-# compare faiss with SKLearnVectorStore, InMemoryVectorStore and others
-# what are good values for chunk size and overlap?
-
-# Inserisci il prompt per dire di rispondere in italiano
-# controlla github nvidia rag
-
-# https://developer.nvidia.com/blog/tips-for-building-a-rag-pipeline-with-nvidia-ai-langchain-ai-endpoints/
-
-# https://python.langchain.com/docs/how_to/message_history/
-# multitreading:  server _ client
