@@ -266,59 +266,143 @@ def create_retriever_tool(retriever):
 # ------------------------
 SYSTEM_PROMPT = """You are a helpful research assistant with access to a document database.
 
-You can search PDF documents when needed, but many questions can be answered directly.
+IMPORTANT: You have TWO ways to respond - choose the right one!
 
-**CRITICAL: Choose ONE of these two options:**
+═══════════════════════════════════════════════
+OPTION 1: Answer directly (USE THIS MOST OF THE TIME)
+═══════════════════════════════════════════════
+For these types of questions, just answer normally:
+✓ General knowledge (geography, science, history, math)
+✓ Greetings and small talk ("hello", "how are you")
+✓ Questions about the conversation ("what's my name?")
+✓ Programming, coding, or technical help
+✓ Common facts everyone knows
 
-Option A - Search documents (use ONLY when information is likely in the PDFs):
-Output EXACTLY: TOOL_CALL: search_documents("your query")
-Nothing else. No explanation. Just that one line.
+Example:
+Question: "What is the capital of Italy?"
+Your response: "The capital of Italy is Rome."
 
-Option B - Answer directly (use for general knowledge, greetings, follow-ups):
-Provide your answer directly. Do NOT mention tools or searching.
+═══════════════════════════════════════════════
+OPTION 2: Search documents (ONLY FOR SPECIALIZED INFO)
+═══════════════════════════════════════════════
+ONLY use this for:
+✓ Specific medical/research information likely in PDFs
+✓ Technical details from specific papers
+✓ When user explicitly mentions "in the documents"
 
-**When to search documents:**
-- Specific information about research studies, papers, or technical details
-- User explicitly asks about document content
-- Information is specialized/domain-specific
+To search, output EXACTLY this (nothing else):
+TOOL_CALL: search_documents("your query")
 
-**When to answer directly:**
-- General knowledge (e.g., "What is the capital of France?")
-- Greetings, small talk, clarifications
-- Math, programming, common facts
-- Follow-up questions when you already have context
+═══════════════════════════════════════════════
 
-**Rules:**
-1. Respond in the SAME language as the question
-2. Be concise and direct
-3. When using search results, cite as (filename.pdf p.N)
-4. NEVER output both a tool call AND an answer
-5. NEVER explain your reasoning - just output the tool call OR the answer"""
+CRITICAL RULES:
+1. Check conversation history FIRST - if you already know the answer, use it
+2. Default to answering directly unless you're 90% sure info is in documents
+3. NEVER output both a tool call AND an answer
+4. Respond in the SAME language as the question
+5. Be conversational and natural
+"""
 
 
 def format_chat_history(messages: Sequence[BaseMessage], max_turns: int = 6) -> str:
     """Format recent chat history for the prompt"""
     # Filter out system messages and tool messages for history
-    chat_messages = [m for m in messages if isinstance(m, (HumanMessage | AIMessage))]
+    chat_messages = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            chat_messages.append(f"User: {msg.content}")
+        elif isinstance(msg, AIMessage):
+            # Skip tool calls in history display, only show actual responses
+            if not hasattr(msg, "tool_calls") or not msg.tool_calls:
+                # Clean the content before adding to history
+                content = msg.content
+                # Remove system prompts that might have leaked
+                if "System:" not in content and "TOOL_CALL:" not in content:
+                    chat_messages.append(f"Assistant: {content}")
 
     # Keep only recent turns
     recent = chat_messages[-(max_turns * 2) :]
 
-    history_parts = []
-    for msg in recent:
-        if isinstance(msg, HumanMessage):
-            history_parts.append(f"Human: {msg.content}")
-        elif isinstance(msg, AIMessage):
-            # Skip tool calls in history display
-            if not msg.tool_calls:
-                history_parts.append(f"Assistant: {msg.content}")
-
-    return "\n".join(history_parts) if history_parts else "No previous conversation."
+    if recent:
+        return "\n".join(recent)
+    return "No previous conversation."
 
 
 # ------------------------
-# Agent Nodes
+# Query Classification
 # ------------------------
+def should_search_documents(query: str, history: str) -> bool:
+    """
+    Classify whether a query needs document search or can be answered directly.
+    Returns True if documents should be searched, False otherwise.
+    """
+    query_lower = query.lower()
+
+    # Definite NO-SEARCH patterns (general conversation)
+    no_search_patterns = [
+        # Greetings and social
+        r"\b(hi|hello|hey|good morning|good afternoon|good evening)\b",
+        r"\bmy name is\b",
+        r"\bi am\b",
+        r"\bhow are you\b",
+        r"\bthank you\b",
+        r"\bthanks\b",
+        r"\bbye\b",
+        # Questions about conversation
+        r"\bwhat.{0,20}my name\b",
+        r"\bwho am i\b",
+        r"\bdo you remember\b",
+        # General knowledge (geography, common facts)
+        r"\bcapital (of|city)\b",
+        r"\bwhat is \d+\b",  # math
+        r"\bhow (many|much|old|tall|long)\b",
+        r"\bwhen (was|did|is)\b",
+        r"\bwhere is\b",
+        r"\bwho (is|was|are)\b",
+        # Programming/technical (not domain-specific)
+        r"\bhow (do|to) (write|code|program|implement)\b",
+        r"\bpython\b",
+        r"\bjavascript\b",
+        r"\bfunction\b",
+    ]
+
+    import re
+
+    for pattern in no_search_patterns:
+        if re.search(pattern, query_lower):
+            return False
+
+    # Definite YES-SEARCH patterns (domain-specific medical/research)
+    yes_search_patterns = [
+        r"\b(study|studies|research|paper|article)\b",
+        r"\b(guideline|recommendation|protocol)\b",
+        r"\b(colonoscopy|endoscopy|ct|mri|imaging)\b",
+        r"\b(patient|clinical|medical|diagnosis)\b",
+        r"\bin the (document|pdf|paper|file)\b",
+        r"\baccording to\b",
+        r"\bwhat does the (document|paper|study)\b",
+    ]
+
+    for pattern in yes_search_patterns:
+        if re.search(pattern, query_lower):
+            return True
+
+    # Check if question references previous context
+    if history and history != "No previous conversation.":
+        # If asking follow-up about something already discussed
+        if any(word in query_lower for word in ["what about", "and what", "also", "more about"]):
+            # Check if previous answer came from documents (has citations)
+            if "(" in history and ".pdf" in history:
+                return True
+
+    # Default: don't search for short queries or very general questions
+    if len(query.split()) <= 3:
+        return False
+
+    # If unclear, default to NO search (answer directly)
+    return False
+
+
 def parse_tool_call(text: str) -> tuple[bool, str, str]:
     """Parse tool call from LLM output
 
@@ -352,44 +436,62 @@ def parse_tool_call(text: str) -> tuple[bool, str, str]:
 
 def clean_llm_output(text: str) -> str:
     """Clean LLM output to remove any meta-commentary or reasoning"""
-    # Remove common meta-patterns
     text = text.strip()
 
-    # If it starts with meta-commentary, try to extract just the answer
-    if any(phrase in text.lower() for phrase in ["assessment:", "answer:", "final answer:", "provide your"]):
-        # Try to find the actual answer after these markers
+    # Remove system prompts that leaked into output
+    if text.startswith("System:") or text.startswith("system:"):
         lines = text.split("\n")
-        answer_lines = []
-        skip = False
+        # Skip until we find actual content
+        for i, line in enumerate(lines):
+            if line and not line.lower().startswith(("system", "you are", "use the provided")):
+                text = "\n".join(lines[i:])
+                break
 
-        for line in lines:
-            lower_line = line.lower()
-            # Skip meta-commentary lines
-            if any(
-                phrase in lower_line
-                for phrase in ["assessment:", "human:", "search results:", "provide your", "after receiving", "i will"]
-            ):
-                skip = True
-                continue
-            # Start capturing after "answer:" marker
-            if "answer:" in lower_line and "tool_call" not in lower_line:
-                skip = False
-                # Get text after "answer:"
-                if ":" in line:
-                    line = line.split(":", 1)[1].strip()
-                if line:
-                    answer_lines.append(line)
-                continue
+    # Remove common meta-patterns
+    patterns_to_remove = [
+        "Assessment:",
+        "Human:",
+        "Search results:",
+        "Provide your final answer",
+        "After receiving",
+        "I will use",
+        "TOOL_CALL:",
+        "Cite sources as",
+    ]
 
-            if not skip and line.strip():
-                answer_lines.append(line)
+    lines = text.split("\n")
+    cleaned_lines = []
 
-        if answer_lines:
-            return "\n".join(answer_lines)
+    for line in lines:
+        # Skip lines that are meta-commentary
+        if any(pattern.lower() in line.lower() for pattern in patterns_to_remove):
+            continue
 
-    return text
+        # Extract answer after "Answer:" marker
+        if "answer:" in line.lower() and "tool_call" not in line.lower():
+            parts = line.split(":", 1)
+            if len(parts) > 1:
+                line = parts[1].strip()
+
+        if line.strip():
+            cleaned_lines.append(line)
+
+    result = "\n".join(cleaned_lines)
+
+    # Final cleanup - remove any remaining system prompt fragments
+    if "Copyrighted material" in result or "CISB - Centro" in result:
+        # Extract just the actual answer
+        sentences = result.split(".")
+        good_sentences = [s for s in sentences if "Copyrighted" not in s and "CISB" not in s and len(s.strip()) > 10]
+        if good_sentences:
+            result = ". ".join(good_sentences) + "."
+
+    return result.strip()
 
 
+# ------------------------
+# Agent Nodes
+# ------------------------
 def create_agent_node(llm, retriever):
     """Create the agent node that decides whether to use tools or respond directly"""
 
@@ -402,7 +504,7 @@ def create_agent_node(llm, retriever):
         # If it's a ToolMessage, we're getting results back from tool execution
         if isinstance(last_message, ToolMessage):
             # Generate final answer based on tool results
-            history = format_chat_history(messages[:-2])  # Exclude tool message and its trigger
+            history = format_chat_history(messages[:-2])
 
             # Get the original question
             original_question = None
@@ -415,15 +517,10 @@ def create_agent_node(llm, retriever):
                 [
                     (
                         "system",
-                        "You are a helpful research assistant. Use the provided search results to answer the question."
-                        "Cite sources as (filename.pdf p.N). "
-                        "Be concise and direct. Respond in the same language as the question.",
+                        "You are a helpful research assistant. Answer the question using the search results provided."
+                        "Cite sources as (filename.pdf p.N). Be concise. Respond in the same language as the question.",
                     ),
-                    (
-                        "human",
-                        f"Question: {original_question}\n\nSearch results:\n{last_message.content}."
-                        "Provide a clear, direct answer:",
-                    ),
+                    ("human", f"Question: {original_question}\n\nSearch results:\n{last_message.content}\n\nAnswer:"),
                 ]
             )
 
@@ -435,28 +532,16 @@ def create_agent_node(llm, retriever):
 
         # Otherwise, process user question
         history = format_chat_history(messages[:-1])
-
         user_query = last_message.content
 
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", SYSTEM_PROMPT),
-                ("human", f"Previous conversation:\n{history}\n\nQuestion: {user_query}\n\nYour response:"),
-            ]
-        )
+        # USE RULE-BASED CLASSIFICATION instead of asking LLM
+        needs_search = should_search_documents(user_query, history)
 
-        # Invoke LLM
-        formatted = prompt.format_messages()
-        response_text = llm.invoke(formatted)
+        if needs_search:
+            # Search documents
+            console.print(f"[yellow]→ Searching documents for: '{user_query}'[/yellow]")
 
-        # Check if LLM wants to use a tool
-        has_tool, tool_name, query = parse_tool_call(response_text)
-
-        if has_tool and tool_name == "search_documents":
-            # Execute tool
-            console.print(f"[yellow]→ Searching documents: '{query}'[/yellow]")
-
-            docs = retriever.invoke(query)
+            docs = retriever.invoke(user_query)
 
             # Print sources table
             table = RichTable(title="Retrieved Documents")
@@ -475,8 +560,38 @@ def create_agent_node(llm, retriever):
             # Return tool message
             return {"messages": [ToolMessage(content=tool_result, tool_call_id="search_docs")]}
 
-        # No tool call, clean and return direct response
+        # Answer directly without searching
+        console.print("[cyan]→ Answering directly (no search needed)[/cyan]")
+
+        # Build direct answer prompt
+        if history and history != "No previous conversation.":
+            human_prompt = f"""Previous conversation:
+{history}
+
+Current question: {user_query}
+
+Provide a helpful, direct answer:"""
+        else:
+            human_prompt = f"""Question: {user_query}
+
+Provide a helpful, direct answer:"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "You are a helpful, friendly assistant. Answer questions directly and conversationally. "
+                    "Remember information from the conversation. Be concise but warm. "
+                    "Respond in the same language as the question.",
+                ),
+                ("human", human_prompt),
+            ]
+        )
+
+        formatted = prompt.format_messages()
+        response_text = llm.invoke(formatted)
         response_text = clean_llm_output(response_text)
+
         return {"messages": [AIMessage(content=response_text)]}
 
     return agent
