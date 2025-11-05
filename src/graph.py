@@ -56,17 +56,28 @@ def format_history(messages: list[dict]):
 
 
 def medical_router(state, answer_validation):
+    """Decide whether the question is medical or general.
+    We use continuity classification to classify follow-up questions.
+    """
+
     print("--- VALIDATE MEDICaL QUESTION ---")
     q = state["question"]
-    label = answer_validation.invoke({"question": q})["score"].strip().lower()
+    prev_domain = state.get("last_domain", "general")
 
-    print("Medical evaluation: ", label)
+    label = answer_validation.invoke({"question": q})["score"].strip().lower()
 
     if label not in ("medical", "general"):
         print("not in medical or general")
         label = "general"
 
-    return {**state, "domain": label}
+    # *** continuity condition ***
+    if label == "general" and prev_domain == "medical":
+        print("continuity condition triggered")
+        label = "medical"
+
+    print("Medical evaluation: ", label)
+
+    return {**state, "domain": label, "last_domain": label}
 
 
 def retrieve_and_filter(state, retriever):
@@ -119,7 +130,13 @@ def generate(state, chain_general):
 
     msgs = push_memory(state, q, answer)
 
-    return {**state, "generation": answer, "rewrite_count": 0, "messages": msgs}
+    return {
+        **state,
+        "generation": answer,
+        "rewrite_count": 0,
+        "messages": msgs,
+        "last_domain": "general",
+    }  # "last_domain" here breaks continuity condition
 
 
 def generate_with_docs(state, rag_chain):

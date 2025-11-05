@@ -18,3 +18,4 @@ class GraphState(TypedDict):
     documents: list[Document]
     rewrite_count: int
     messages: list[dict]
+    last_domain: str
