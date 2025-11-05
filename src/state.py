@@ -1,5 +1,7 @@
 from typing import TypedDict
 
+from langchain.schema import Document
+
 
 class GraphState(TypedDict):
     """
@@ -13,5 +15,6 @@ class GraphState(TypedDict):
 
     question: str
     generation: str
-    documents: list[str]
+    documents: list[Document]
     rewrite_count: int
+    messages: list[dict]

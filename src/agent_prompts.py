@@ -5,17 +5,47 @@
 
 from langchain.prompts import PromptTemplate
 
+prompt_validate_medical = PromptTemplate(
+    template="""Classify the USER QUESTION.
+    QUESTION:
+    {question}
+
+    Return "medical" if the question is about medicine, diseases, colonoscopy, polyps, CT colonography,
+    biopsy, radiology, gastroenterology, etc.
+    Otherwise return: "general".
+
+    Respond ONLY with JSON: {{"score": "medical"}} or {{"score": "general"}}.
+    """,
+    input_variables=["question"],
+)
+
+
+prompt_general = PromptTemplate(
+    template="""You are a scientific assistant. Answer the question accurately and concisely.
+
+    Conversation history (most recent first):
+    {history}
+
+    Current question:
+    {question}
+    """,
+    input_variables=["history", "question"],
+)
+
+
 prompt_rag = PromptTemplate(
     template="""You are a scientific assistant. Use the context below to answer the question accurately and concisely.
 
-    Context:
+    Conversation history (most recent first):
+    {history}
+
+    Retrieved context:
     {context}
 
-    Question:
+    Current question:
     {question}
-
-    Answer:""",
-    input_variables=["context", "question"],
+    """,
+    input_variables=["history", "context", "question"],
 )
 
 

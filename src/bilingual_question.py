@@ -63,6 +63,20 @@ class BilingualQuestion:
         """Use fastText for reliable detection, even on short text."""
         if not text.strip():
             return "en"
+
+        # Quick heuristic for short text
+        if len(text.split()) < 2:
+            if any(c in text.lower() for c in ["è", "ò", "à", "ì", "ù"]) or text.lower() in {
+                "ciao",
+                "salve",
+                "arrivederci",
+                "grazie",
+                "addio",
+            }:
+                return "it"
+            if text.lower() in {"hi", "hello", "thanks", "bye"}:
+                return "en"
+
         prediction = _FASTTEXT_MODEL.predict(text.replace("\n", " "))
         lang = prediction[0][0].replace("__label__", "")
         return lang.split("_")[0]  # remove regional code, e.g., 'en_uk' -> 'en'
@@ -72,9 +86,14 @@ class BilingualQuestion:
         text = text.strip()
         # Quick heuristic for short text
         if len(text.split()) < 2:
-            if any(c in text.lower() for c in ["è", "ò", "à", "ì", "ù"]) or text.lower() in {"ciao", "grazie"}:
+            if any(c in text.lower() for c in ["è", "ò", "à", "ì", "ù"]) or text.lower() in {
+                "ciao",
+                "salve",
+                "arrivederci",
+                "grazie",
+            }:
                 return "it"
-            if text.lower() in {"hi", "hello", "thanks"}:
+            if text.lower() in {"hi", "hello", "thanks", "bye"}:
                 return "en"
 
         try:

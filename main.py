@@ -1,16 +1,19 @@
 import os
+import sys
 
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnableLambda
 from rich.pretty import Pretty
 
 import src._load_env as _  # noqa: F401
 from src._load_env import Config, cfg, console
-from src.agent_prompts import prompt_hallucination, prompt_rag, prompt_rewrite_medical, prompt_usefulness
+from src.agent_prompts import prompt_general, prompt_rag, prompt_rewrite_medical, prompt_validate_medical
+from src.bilingual_question import BilingualQuestion
 from src.build_faiss import build_faiss_index, load_vectorstore
 from src.graph import RAGContext, build_agent_graph
 from src.llm_build import build_llm_pipe
 from src.retriever import build_retriever
-from src.utils import clean_answer, parse_json
+from src.utils import extract_answer_text, extract_last_json
 
 
 # ------------------------
@@ -27,44 +30,53 @@ def interactive_loop(cfg: Config):
     )
     llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
 
-    rag_chain = prompt_rag | llm | clean_answer | StrOutputParser()
-    hallucination_grader = prompt_hallucination | llm | clean_answer | parse_json
-    answer_grader = prompt_usefulness | llm | clean_answer | parse_json
-    question_rewriter = prompt_rewrite_medical | llm | clean_answer | StrOutputParser()
+    llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
+    clean_answer = RunnableLambda(extract_answer_text)
+    parse_json = RunnableLambda(extract_last_json)
+
+    answer_validation = prompt_validate_medical | llm_runnable | clean_answer | parse_json
+    chain_general = prompt_general | llm_runnable | clean_answer | StrOutputParser()
+    rag_chain = prompt_rag | llm_runnable | clean_answer | StrOutputParser()
+    question_rewriter = prompt_rewrite_medical | llm_runnable | clean_answer | StrOutputParser()
 
     ctx = RAGContext(
+        answer_validation=answer_validation,
+        chain_general=chain_general,
         retriever=retriever,
         rag_chain=rag_chain,
-        hallucination_grader=hallucination_grader,
-        answer_grader=answer_grader,
         question_rewriter=question_rewriter,
     )
 
     # Build agent graph
     agent = build_agent_graph(ctx)
 
-    console.print("[bold green]RAG Agent. Type 'exit', 'quit' or 'q' to quit.[/bold green]")
+    console.print("[bold green]RAG Agent. Type 'esci', 'exit', 'quit' or 'q' to quit.[/bold green]")
     console.print("[yellow]The agent will decide when to search documents and when to respond directly.[/yellow]")
 
     thread_id = "default"
 
     while True:
         try:
-            question = input("\nYou: ")
+            print("\nYou: ", end="", flush=True)
+            question = sys.stdin.buffer.readline().decode("utf-8", errors="replace").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
-        if question.strip().lower() in {"exit", "quit", "q"}:
+        if question.strip().lower() in {"exit", "quit", "q", "esci"}:
             break
+
+        quest = BilingualQuestion(question)
 
         # Invoke agent
         config = {"configurable": {"thread_id": thread_id}}
-        agent_input = {"question": question, "config": config}
+        agent_input = {"question": quest.en}
+
+        print("HEEEEEEEEEEREEEEEE", agent_input, quest.it)
 
         last_output = None
         try:
             # Stream the agent's execution
-            for output in agent.stream(agent_input):
+            for output in agent.stream(agent_input, config=config):
                 for _key, value in output.items():
                     # Node
                     # pprint(f"Node '{key}':")

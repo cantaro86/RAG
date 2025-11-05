@@ -1,18 +1,19 @@
-import re
 from dataclasses import dataclass, fields
 
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from ._load_env import cfg
 from .bilingual_question import BilingualQuestion
 from .state import GraphState
 
 
 @dataclass
 class RAGContext:
+    answer_validation: object
     retriever: object
     rag_chain: object
-    hallucination_grader: object
-    answer_grader: object
+    chain_general: object
     question_rewriter: object
 
     def __post_init__(self):
@@ -23,8 +24,49 @@ class RAGContext:
 
 
 # ------------------------
+# Memory
+# ------------------------
+
+
+def push_memory(state, user_q, assistant_a):
+    msgs = state.get("messages", [])
+
+    msgs.append({"role": "user", "content": user_q})
+    msgs.append({"role": "assistant", "content": assistant_a})
+
+    msgs = msgs[-(cfg.max_history_turns * 2) :]
+
+    return msgs
+
+
+def format_history(messages: list[dict]):
+    if not messages:
+        return "No prior conversation."
+    blocks = []
+    # newest last (human likes chronological; model doesn’t care)
+    for m in messages[-(cfg.max_history_turns * 2) :]:  # 6 turns == 12 entries
+        role = "Q" if m["role"] == "user" else "A"
+        blocks.append(f"{role}: {m['content']}")
+    return "\n".join(blocks)
+
+
+# ------------------------
 # Agent Nodes
 # ------------------------
+
+
+def medical_router(state, answer_validation):
+    print("--- VALIDATE MEDICaL QUESTION ---")
+    q = state["question"]
+    label = answer_validation.invoke({"question": q})["score"].strip().lower()
+
+    print("Medical evaluation: ", label)
+
+    if label not in ("medical", "general"):
+        print("not in medical or general")
+        label = "general"
+
+    return {**state, "domain": label}
 
 
 def retrieve_and_filter(state, retriever):
@@ -38,11 +80,10 @@ def retrieve_and_filter(state, retriever):
     docs_en = retriever.invoke(q.en)
     all_docs = docs_it + docs_en
 
-    threshold = 0.0
-    relevant_docs = [d for d in all_docs if d.metadata.get("rerank_score", 0) > threshold]
+    relevant_docs = [d for d in all_docs if d.metadata.get("rerank_score", 0) > cfg.threshold]
 
     if relevant_docs:
-        print(f"✅ Found {len(relevant_docs)} relevant docs (threshold={threshold})")
+        print(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
         return {
             "documents": relevant_docs,
             "question": question,
@@ -59,7 +100,7 @@ def retrieve_and_filter(state, retriever):
         }
 
 
-def generate(state, rag_chain):
+def generate(state, chain_general):
     """
     Generate answer
 
@@ -69,24 +110,39 @@ def generate(state, rag_chain):
     Returns:
         state (dict): New key added to state, generation, that contains LLM generation
     """
-    print("---GENERATE---")
-    question = state["question"]
-    documents = state["documents"]
-    rewrite_count = state.get("rewrite_count", 0)
 
-    if not documents and rewrite_count >= 3:
-        print(f"⚠️ No documents found after {rewrite_count} rewrites — generating without context.")
-        # context = "No relevant context found. Use general medical knowledge to answer."
-        context = (
-            "No relevant context found in the knowledge base. "
-            "Answer briefly and factually based on general knowledge, "
-            "in few sentences."
-        )
-        generation = rag_chain.invoke({"context": context, "question": question})
-    else:
-        # RAG generation
-        generation = rag_chain.invoke({"context": documents, "question": question})
-    return {"documents": documents, "question": question, "generation": generation, "rewrite_count": rewrite_count}
+    print("---GENERATE---")
+    q = state["question"]
+    hist = format_history(state.get("messages", []))
+
+    answer = chain_general.invoke({"history": hist, "question": q})
+
+    msgs = push_memory(state, q, answer)
+
+    return {**state, "generation": answer, "rewrite_count": 0, "messages": msgs}
+
+
+def generate_with_docs(state, rag_chain):
+    """
+    Generate answer
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        state (dict): New key added to state, generation, that contains LLM generation
+    """
+
+    print("---GENERATE WITH DOCS---")
+    q = state["question"]
+    docs = state.get("documents", [])
+    hist = format_history(state.get("messages", []))
+
+    answer = rag_chain.invoke({"history": hist, "context": docs, "question": q})
+
+    msgs = push_memory(state, q, answer)
+
+    return {**state, "generation": answer, "rewrite_count": 0, "messages": msgs}
 
 
 def transform_query(state, question_rewriter):
@@ -102,34 +158,10 @@ def transform_query(state, question_rewriter):
 
     print("---TRANSFORM QUERY---")
     question = state["question"]
-    documents = state["documents"]
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question})
-    return {"documents": documents, "question": better_question}
-
-
-def validate_question(state):
-    """
-    Check if the user input is a valid question.
-    If not, short-circuit and return a polite response.
-    """
-    text = state["question"].strip().lower()
-
-    # Simple keyword and structure check
-    question_like = bool(re.search(r"\b(what|why|how|when|where|who|which|is|are|can|does|do)\b", text))
-    is_question_mark = text.endswith("?")
-
-    if question_like or is_question_mark:
-        # Proceed normally
-        return {"valid_question": True}
-    else:
-        print("🚫 Input is not a question. Stopping early.")
-        # Optional: short, friendly reply
-        return {
-            "valid_question": False,
-            "generation": "Hello! How can I help you with a question about medical reports or general knowledge?",
-        }
+    return {**state, "question": better_question}
 
 
 # ------------------------
@@ -145,55 +177,8 @@ def decide_relevance(state):
     rewrite_count = state.get("rewrite_count", 0)
 
     if has_docs:
-        return "generate"
-    elif rewrite_count >= 3:
-        print("🚫 Max rewrites reached — fallback to generation without context.")
-        return "generate"
-    else:
-        return "transform_query"
-
-
-def grade_generation_v_documents_and_question(state, hallucination_grader, answer_grader):
-    """
-    Determines whether the generation is grounded in the document and answers question.
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        str: Decision for next node to call
-    """
-
-    print("---CHECK HALLUCINATIONS---")
-    question = state["question"]
-    documents = state["documents"]
-    generation = state["generation"]
-
-    score = hallucination_grader.invoke({"documents": documents, "generation": generation})
-    grade = score["score"]
-
-    # Check hallucination
-    if grade == "yes":
-        print("---DECISION: GENERATION IS GROUNDED IN DOCUMENTS---")
-        # Check question-answering
-        print("---GRADE GENERATION vs QUESTION---")
-        score = answer_grader.invoke({"question": question, "generation": generation})
-        grade = score["score"]
-        if grade == "yes":
-            print("---DECISION: GENERATION ADDRESSES QUESTION---")
-            return "useful"
-        else:
-            print("---DECISION: GENERATION DOES NOT ADDRESS QUESTION---")
-            return "not useful"
-    else:
-        print("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
-        return "not supported"
-
-
-def next_step(state):
-    if state["has_docs"]:
-        return "generate"
-    elif state["rewrite_count"] >= 3:
+        return "generate_with_docs"
+    elif has_docs is False and rewrite_count >= 2:
         print("🚫 Max rewrites reached — fallback to generation without context.")
         return "generate"
     else:
@@ -206,43 +191,41 @@ def next_step(state):
 def build_agent_graph(ctx: RAGContext):
     """Build the LangGraph agent"""
 
+    checkpointer = InMemorySaver()
+
     workflow = StateGraph(GraphState)
 
-    workflow.add_node("validate_question", validate_question)
+    workflow.add_node("medical_router", lambda state: medical_router(state, ctx.answer_validation))
 
     workflow.add_node("retrieve_and_filter", lambda state: retrieve_and_filter(state, ctx.retriever))
 
-    workflow.add_node("generate", lambda state: generate(state, ctx.rag_chain))
+    workflow.add_node("generate", lambda state: generate(state, ctx.chain_general))
+
+    workflow.add_node("generate_with_docs", lambda state: generate_with_docs(state, ctx.rag_chain))
 
     workflow.add_node("transform_query", lambda state: transform_query(state, ctx.question_rewriter))
 
-    workflow.add_edge(START, "validate_question")
+    workflow.add_edge(START, "medical_router")
 
     workflow.add_conditional_edges(
-        "validate_question",
-        lambda state: "retrieve_and_filter" if state.get("valid_question", False) else END,
-        {"retrieve_and_filter": "retrieve_and_filter", END: END},
+        "medical_router",
+        lambda state: state["domain"],  # this must return "medical" or "general"
+        {
+            "medical": "retrieve_and_filter",
+            "general": "generate",
+        },
     )
 
     workflow.add_conditional_edges(
         "retrieve_and_filter",
         decide_relevance,
-        {
-            "transform_query": "transform_query",
-            "generate": "generate",
-        },
+        {"transform_query": "transform_query", "generate": "generate", "generate_with_docs": "generate_with_docs"},
     )
+
     workflow.add_edge("transform_query", "retrieve_and_filter")
 
-    workflow.add_conditional_edges(
-        "generate",
-        lambda state: grade_generation_v_documents_and_question(state, ctx.hallucination_grader, ctx.answer_grader),
-        {
-            "not supported": "generate",
-            "useful": END,
-            "not useful": "transform_query",
-        },
-    )
+    workflow.add_edge("generate", END)
+    workflow.add_edge("generate_with_docs", END)
 
-    agent = workflow.compile()
+    agent = workflow.compile(checkpointer=checkpointer)
     return agent

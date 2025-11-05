@@ -15,3 +15,6 @@ In another terminal
 ```bash
 ssh -N -L 5643:dgx01:5643 dgx01
 ```
+
+
+![AI AGENT](graph.png)

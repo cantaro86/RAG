@@ -1,8 +1,6 @@
 import json
 import re
 
-from langchain_core.runnables import RunnableLambda
-
 
 def extract_last_json(raw_text: str):
     """
@@ -40,7 +38,3 @@ def extract_answer_text(raw_text: str):
     else:
         # If no explicit "Answer:" header, return full output
         return raw_text.strip()
-
-
-clean_answer = RunnableLambda(extract_answer_text)
-parse_json = RunnableLambda(extract_last_json)
