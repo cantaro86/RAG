@@ -72,19 +72,21 @@ prompt_usefulness = PromptTemplate(
 
 # Question rewriter
 prompt_rewrite_medical = PromptTemplate(
-    template="""You are a professional assistant specialized in reformulating factual and medical questions
+    template="""You are a professional assistant specialized in reformulating medical questions
 to improve information retrieval.
 
-# Your task:
-# - Rephrase the question **only if necessary** to make it clearer and more likely to match relevant documents.
-# - If necessary, se standard medical terminology.
-# - Do not change its meaning, specificity, or focus. Keep the topic identical.
-# - Produce exactly ONE improved version of the question.
-# - Do not generate explanations, lists, or multiple options.
+Your task:
+- Given the conversation history and the user's last question, rewrite the question so that it is fully explicit
+and unambiguous.
+- Replace pronouns like "their", "they", "it", "this", etc. with the actual referenced entity from the history.
+- Rephrase the question **only if necessary** to make it clearer and more likely to match relevant documents.
+- Do not change its meaning, specificity, or focus. Keep the topic identical.
+- Produce only the question, no introductions, explanations, lists, or multiple options.
 
 Question: {question}
 
-Answer:
+Conversation history (oldest first): {history}
+
 """,
-    input_variables=["question"],
+    input_variables=["question", "history"],
 )

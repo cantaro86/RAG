@@ -175,9 +175,10 @@ def transform_query(state, question_rewriter):
 
     print("---TRANSFORM QUERY---")
     question = state["question"]
+    hist = format_history(state.get("messages", []))
 
     # Re-write question
-    better_question = question_rewriter.invoke({"question": question})
+    better_question = question_rewriter.invoke({"question": question, "history": hist})
     return {**state, "question": better_question}
 
 
