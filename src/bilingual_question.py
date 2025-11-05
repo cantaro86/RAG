@@ -32,6 +32,49 @@ translator_en_it = pipeline("translation", model=cfg.translate_model_en_it)
 
 
 class BilingualQuestion:
+    FASTTEXT_CONFIDENCE_THRESHOLD = 0.4
+
+    ITALIAN_WORLDS = {
+        "ciao",
+        "salve",
+        "arrivederci",
+        "grazie",
+        "addio",
+        "il",
+        "la",
+        "lo",
+        "gli",
+        "le",
+        "di",
+        "dove",
+        "da",
+        "quando",
+        "che",
+        "non",
+        "per",
+        "come",
+        "stai",
+    }
+
+    ENGLISH_WORDS = {
+        "hi",
+        "hello",
+        "thanks",
+        "bye",
+        "goodbye",
+        "the",
+        "is",
+        "are",
+        "thank",
+        "you",
+        "how",
+        "what",
+        "where",
+        "when",
+        "who",
+        "why",
+    }
+
     def __init__(self, text: str):
         self.text = text.strip()
         self.lang = self._detect_language(self.text)
@@ -59,6 +102,13 @@ class BilingualQuestion:
             lang = self._robust_detect(text)
         return lang
 
+    def _detect_simple_heuristic(self, text: str) -> str:
+        """Simple heuristic detection for very short text."""
+        if any(c in text.lower() for c in ["è", "é", "ò", "à", "ì", "ù"]) or text.lower() in self.ITALIAN_WORLDS:
+            return "it"
+        if text.lower() in self.ENGLISH_WORDS:
+            return "en"
+
     def _detect_fasttext(self, text: str) -> str:
         """Use fastText for reliable detection, even on short text."""
         if not text.strip():
@@ -66,35 +116,27 @@ class BilingualQuestion:
 
         # Quick heuristic for short text
         if len(text.split()) < 2:
-            if any(c in text.lower() for c in ["è", "ò", "à", "ì", "ù"]) or text.lower() in {
-                "ciao",
-                "salve",
-                "arrivederci",
-                "grazie",
-                "addio",
-            }:
-                return "it"
-            if text.lower() in {"hi", "hello", "thanks", "bye"}:
-                return "en"
+            heuristic_lang = self._detect_simple_heuristic(text)
+            if heuristic_lang:
+                return heuristic_lang
 
         prediction = _FASTTEXT_MODEL.predict(text.replace("\n", " "))
+
+        if prediction[1][0] < self.FASTTEXT_CONFIDENCE_THRESHOLD:
+            return self._robust_detect(text)
+
         lang = prediction[0][0].replace("__label__", "")
         return lang.split("_")[0]  # remove regional code, e.g., 'en_uk' -> 'en'
 
     def _robust_detect(self, text: str) -> str:
         """Fallback detection using langdetect + heuristic."""
         text = text.strip()
+
         # Quick heuristic for short text
         if len(text.split()) < 2:
-            if any(c in text.lower() for c in ["è", "ò", "à", "ì", "ù"]) or text.lower() in {
-                "ciao",
-                "salve",
-                "arrivederci",
-                "grazie",
-            }:
-                return "it"
-            if text.lower() in {"hi", "hello", "thanks", "bye"}:
-                return "en"
+            heuristic_lang = self._detect_simple_heuristic(text)
+            if heuristic_lang:
+                return heuristic_lang
 
         try:
             langs = detect_langs(text)

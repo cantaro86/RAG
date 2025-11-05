@@ -65,7 +65,11 @@ def interactive_loop(cfg: Config):
         if question.strip().lower() in {"exit", "quit", "q", "esci"}:
             break
 
-        quest = BilingualQuestion(question)
+        try:
+            quest = BilingualQuestion(question)
+        except ValueError as e:
+            console.print(f"[red]Error: {e}[/red]")
+            continue
 
         # Invoke agent
         config = {"configurable": {"thread_id": thread_id}}
