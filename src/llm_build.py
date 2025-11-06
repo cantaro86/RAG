@@ -5,6 +5,9 @@ from langchain_huggingface import HuggingFacePipeline
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
 from ._load_env import DEVICE, console
+from .loggers import Logger
+
+logger = Logger.get_logger(__name__)
 
 
 # ------------------------
@@ -15,6 +18,7 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
     Build a HuggingFace LLM pipeline with proper conversation handling.
     """
     console.print(f"Loading LLM: [bold]{model_name}[/bold] on device [bold]{DEVICE}[/bold]")
+    logger.info(f"Loading LLM: {model_name} on device {DEVICE}")
 
     tok = AutoTokenizer.from_pretrained(model_name, token=os.environ.get("HF_TOKEN"))
     model = AutoModelForCausalLM.from_pretrained(
@@ -61,10 +65,10 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
                     formatted_messages.append({"role": "user", "content": str(msg)})
 
         # DEBUG: Print what we're sending to the model
-        print("=== FORMATTED MESSAGES FOR MODEL ===")
+        logger.debug("=== FORMATTED MESSAGES FOR MODEL ===")
         for i, msg in enumerate(formatted_messages):
-            print(f"{i}: {msg['role']}: {msg['content']}")
-        print("=====================================")
+            logger.debug(f"{i}: {msg['role']}: {msg['content']}")
+        logger.debug("=====================================")
 
         # Apply Mistral chat template
         prompt = tok.apply_chat_template(formatted_messages, tokenize=False, add_generation_prompt=True)

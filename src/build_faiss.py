@@ -16,6 +16,9 @@ from langdetect import detect
 from tqdm import tqdm
 
 from ._load_env import Config, cfg, console
+from .loggers import Logger
+
+logger = Logger.get_logger(__name__)
 
 
 def load_pdfs(pdf_dir: str) -> list[Document]:
@@ -82,9 +85,11 @@ def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
 
 def build_faiss_index(cfg: Config) -> None:
     console.rule("[bold]Indexing PDFs -> FAISS")
+    logger.info("Indexing PDFs -> FAISS")
     docs = load_pdfs(cfg.pdf_dir)
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
+    logger.info("Loaded %d pages -> %d chunks.", len(docs), len(chunks))
 
     embedder = build_embedder(cfg.embed_model)
     vs = FAISS.from_documents(chunks, embedder)
@@ -92,6 +97,7 @@ def build_faiss_index(cfg: Config) -> None:
     os.makedirs(cfg.index_dir, exist_ok=True)
     vs.save_local(cfg.index_dir)
     console.print(f"Saved FAISS index to [bold]{cfg.index_dir}[/bold]")
+    logger.info("Saved FAISS index to %s", cfg.index_dir)
 
 
 def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
@@ -101,15 +107,13 @@ def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
     if getattr(cfg, "use_gpu_index", False):
         try:
             if faiss.get_num_gpus() > 0:
-                console.print(
-                    f"[green]FAISS GPU detected: {faiss.get_num_gpus()} GPU(s). Moving loaded index to GPU...[/green]"
-                )
+                logger.info("FAISS GPU detected: %d GPU(s). Moving loaded index to GPU...", faiss.get_num_gpus())
                 res = faiss.StandardGpuResources()
                 res.setTempMemory(128 * 1024 * 1024)
                 vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
             else:
-                console.print("[yellow]No GPU detected by FAISS. Using CPU index.[/yellow]")
+                logger.warning("No GPU detected by FAISS. Using CPU index.")
         except ImportError:
-            console.print("[red]FAISS GPU not available. Using CPU index.[/red]")
+            logger.warning("FAISS GPU not available. Using CPU index.")
 
     return vs

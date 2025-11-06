@@ -1,19 +1,22 @@
 import os
 import sys
 
+import src._load_env as _  # noqa: F401  # isort: skip
+from src._load_env import Config, cfg, console  # noqa: F401  # isort: skip
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
-from rich.pretty import Pretty
 
-import src._load_env as _  # noqa: F401
-from src._load_env import Config, cfg, console
 from src.agent_prompts import prompt_general, prompt_rag, prompt_rewrite_medical, prompt_validate_medical
 from src.bilingual_question import BilingualQuestion
 from src.build_faiss import build_faiss_index, load_vectorstore
 from src.graph import RAGContext, build_agent_graph
 from src.llm_build import build_llm_pipe
+from src.loggers import Logger
 from src.retriever import build_retriever
 from src.utils import extract_answer_text, extract_last_json
+
+logger = Logger.get_logger(__name__)
 
 
 # ------------------------
@@ -67,6 +70,7 @@ def interactive_loop(cfg: Config):
 
         try:
             quest = BilingualQuestion(question)
+            logger.debug(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
             console.print(f"[red]Error: {e}[/red]")
             continue
@@ -75,20 +79,14 @@ def interactive_loop(cfg: Config):
         config = {"configurable": {"thread_id": thread_id}}
         agent_input = {"question": quest.en}
 
-        print("HEEEEEEEEEEREEEEEE", agent_input, quest.it)
-
         last_output = None
         try:
             # Stream the agent's execution
             for output in agent.stream(agent_input, config=config):
                 for _key, value in output.items():
-                    # Node
-                    # pprint(f"Node '{key}':")
-                    # Optional: print full state at each node
-                    # console.print(value, indent=2, width=80, depth=None)
-                    console.print(Pretty(value, max_depth=4))
+                    logger.debug(f"Key: {_key}")
+                    logger.debug(f"Value: {value}")
                     last_output = value
-                console.print("\n---\n")
 
             # Final generation
             if last_output and isinstance(last_output, dict) and "generation" in last_output:
@@ -104,7 +102,7 @@ def interactive_loop(cfg: Config):
 
 
 def main():
-    console.print(f"Using HF cache dir: [bold]{cfg.hf_home}[/bold]")
+    logger.info(f"Using HF cache dir: {cfg.hf_home}")
 
     # Rebuild FAISS index if requested
     if getattr(cfg, "reindex", False):

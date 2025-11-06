@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, fields
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -5,7 +6,10 @@ from langgraph.graph import END, START, StateGraph
 
 from ._load_env import cfg
 from .bilingual_question import BilingualQuestion
+from .loggers import Logger
 from .state import GraphState
+
+logger = Logger.get_logger(__name__)
 
 
 @dataclass
@@ -60,28 +64,28 @@ def medical_router(state, answer_validation):
     We use continuity classification to classify follow-up questions.
     """
 
-    print("--- VALIDATE MEDICaL QUESTION ---")
+    logger.info("--- VALIDATE MEDICAL QUESTION ---")
     q = state["question"]
     prev_domain = state.get("last_domain", "general")
 
     label = answer_validation.invoke({"question": q})["score"].strip().lower()
 
     if label not in ("medical", "general"):
-        print("not in medical or general")
+        logger.debug("not in medical or general")
         label = "general"
 
     # *** continuity condition ***
     if label == "general" and prev_domain == "medical":
-        print("continuity condition triggered")
+        logger.debug("continuity condition triggered")
         label = "medical"
 
-    print("Medical evaluation: ", label)
+    logger.info(f"Medical evaluation: {label}")
 
     return {**state, "domain": label, "last_domain": label}
 
 
 def retrieve_and_filter(state, retriever):
-    print("---RETRIEVE + FILTER---")
+    logger.info("---RETRIEVE + FILTER---")
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
 
@@ -93,8 +97,18 @@ def retrieve_and_filter(state, retriever):
 
     relevant_docs = [d for d in all_docs if d.metadata.get("rerank_score", 0) > cfg.threshold]
 
+    # Debug info
+    if logger.level <= logging.DEBUG:
+        from scipy.special import expit
+
+        score_prob = []
+        for d in all_docs:
+            score_prob.append([d.metadata["rerank_score"], expit(d.metadata["rerank_score"])])
+    logger.debug(f"Retrieved {len(all_docs)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
+    logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
+
     if relevant_docs:
-        print(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
+        logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
         return {
             "documents": relevant_docs,
             "question": question,
@@ -102,7 +116,7 @@ def retrieve_and_filter(state, retriever):
             "has_docs": True,
         }
     else:
-        print(f"⚠️ No relevant docs found (attempt {rewrite_count + 1})")
+        logger.info(f"⚠️ No relevant docs found (attempt {rewrite_count + 1})")
         return {
             "documents": [],
             "question": question,
@@ -122,7 +136,7 @@ def generate(state, chain_general):
         state (dict): New key added to state, generation, that contains LLM generation
     """
 
-    print("---GENERATE---")
+    logger.info("---GENERATE---")
     q = state["question"]
     hist = format_history(state.get("messages", []))
 
@@ -150,7 +164,7 @@ def generate_with_docs(state, rag_chain):
         state (dict): New key added to state, generation, that contains LLM generation
     """
 
-    print("---GENERATE WITH DOCS---")
+    logger.info("---GENERATE WITH DOCS---")
     q = state["question"]
     docs = state.get("documents", [])
     hist = format_history(state.get("messages", []))
@@ -173,7 +187,7 @@ def transform_query(state, question_rewriter):
         state (dict): Updates question key with a re-phrased question
     """
 
-    print("---TRANSFORM QUERY---")
+    logger.info("---TRANSFORM QUERY---")
     question = state["question"]
     hist = format_history(state.get("messages", []))
 
@@ -197,7 +211,7 @@ def decide_relevance(state):
     if has_docs:
         return "generate_with_docs"
     elif has_docs is False and rewrite_count >= 2:
-        print("🚫 Max rewrites reached — fallback to generation without context.")
+        logger.info("🚫 Max rewrites reached — fallback to generation without context.")
         return "generate"
     else:
         return "transform_query"

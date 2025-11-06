@@ -1,6 +1,10 @@
 import json
 import re
 
+from .loggers import Logger
+
+logger = Logger.get_logger(__name__)
+
 
 def extract_last_json(raw_text: str):
     """
@@ -10,7 +14,7 @@ def extract_last_json(raw_text: str):
     # Match any {...} including across line breaks
     matches = re.findall(r"\{[^{}]+\}", raw_text, re.DOTALL)
     if not matches:
-        print("No JSON object found in output.")
+        logger.debug("No JSON object found in output.")
         return {"score": "no"}
 
     last = matches[-1]
@@ -22,7 +26,7 @@ def extract_last_json(raw_text: str):
         try:
             return json.loads(cleaned)
         except Exception:
-            print("Failed to decode last JSON object.")
+            logger.debug("Failed to decode last JSON object.")
             return {"score": "no"}
 
 
@@ -34,7 +38,9 @@ def extract_answer_text(raw_text: str):
     # Try to find 'Answer:' ignoring case
     match = re.search(r"(?i)answer\s*:\s*(.*)", raw_text, re.DOTALL)
     if match:
+        logger.debug("Extracted answer section from output.")
         return match.group(1).strip()
     else:
+        logger.debug("No explicit 'Answer:' section found; returning full output.")
         # If no explicit "Answer:" header, return full output
         return raw_text.strip()

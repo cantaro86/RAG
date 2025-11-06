@@ -5,6 +5,9 @@ from langchain_community.vectorstores import FAISS
 from sentence_transformers import CrossEncoder
 
 from ._load_env import DEVICE, console
+from .loggers import Logger
+
+logger = Logger.get_logger(__name__)
 
 
 # ------------------------
@@ -46,6 +49,7 @@ def build_retriever(vs: FAISS, k: int, rerank_model: str | None, k_reranked: int
     base_retriever = vs.as_retriever(search_kwargs={"k": k})
     if rerank_model:
         console.print(f"Using cross-encoder reranker ({DEVICE}): [bold]{rerank_model}[/bold]")
+        logger.info(f"Using cross-encoder reranker ({DEVICE}): {rerank_model}")
         cross_encoder = MPSSentenceCrossEncoder(rerank_model)
         compressor = ScoredCrossEncoderReranker(model=cross_encoder, top_n=k_reranked)
         retriever = ContextualCompressionRetriever(

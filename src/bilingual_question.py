@@ -6,15 +6,18 @@ from langdetect import detect_langs
 from transformers import pipeline
 
 from ._load_env import cfg
+from .loggers import Logger
+
+logger = Logger.get_logger(__name__)
 
 
 def get_fasttext_model():
     model_path = "lid.176.ftz"
     if not os.path.exists(model_path):
-        print("🔽 Downloading FastText language identification model (lid.176.ftz)...")
+        logger.info("🔽 Downloading FastText language identification model (lid.176.ftz)...")
         url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
         urllib.request.urlretrieve(url, model_path)
-        print("✅ Download complete.")
+        logger.info("✅ Download complete.")
     return fasttext.load_model(model_path)
 
 
@@ -22,10 +25,10 @@ try:
     _FASTTEXT_AVAILABLE = True
     _FASTTEXT_MODEL = get_fasttext_model()
 except Exception as e:
-    print(f"⚠️ FastText model not available ({e}), using fallback detector.")
+    logger.warning(f"⚠️ FastText model not available ({e}), using fallback detector.")
     _FASTTEXT_AVAILABLE = False
 
-print("_FASTTEXT_AVAILABLE: ", _FASTTEXT_AVAILABLE)
+logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
 
 translator_it_en = pipeline("translation", model=cfg.translate_model_it_en)
 translator_en_it = pipeline("translation", model=cfg.translate_model_en_it)
@@ -111,6 +114,9 @@ class BilingualQuestion:
 
     def _detect_fasttext(self, text: str) -> str:
         """Use fastText for reliable detection, even on short text."""
+
+        logger.debug("fastText detection")
+
         if not text.strip():
             return "en"
 
@@ -122,6 +128,8 @@ class BilingualQuestion:
 
         prediction = _FASTTEXT_MODEL.predict(text.replace("\n", " "))
 
+        logger.debug(f"fastText prediction: {prediction}")
+
         if prediction[1][0] < self.FASTTEXT_CONFIDENCE_THRESHOLD:
             return self._robust_detect(text)
 
@@ -130,6 +138,9 @@ class BilingualQuestion:
 
     def _robust_detect(self, text: str) -> str:
         """Fallback detection using langdetect + heuristic."""
+
+        logger.debug("Robust detection")
+
         text = text.strip()
 
         # Quick heuristic for short text
@@ -150,9 +161,9 @@ class BilingualQuestion:
     def _heuristic_detect(self, text: str) -> str:
         """Fallback rules for very short or ambiguous text."""
         t = text.lower()
-        if any(w in t for w in ["il", "la", "che", "non", "per", "ciao", "grazie", "come", "stai"]):
+        if any(w in t for w in self.ITALIAN_WORLDS):
             return "it"
-        if any(w in t for w in ["the", "is", "are", "hello", "hi", "thank", "you", "how", "what"]):
+        if any(w in t for w in self.ENGLISH_WORDS):
             return "en"
         return "en"  # Default to English if uncertain
 
