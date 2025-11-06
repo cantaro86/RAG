@@ -15,7 +15,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langdetect import detect
 from tqdm import tqdm
 
-from ._load_env import Config, cfg, console
+from ._load_env import ONLINE, Config, cfg, console
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -76,10 +76,15 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
 # Build FAISS
 # ------------------------
 def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
+    offline = not (ONLINE and getattr(cfg, "online", True))
+
     return HuggingFaceEmbeddings(
         model_name=model_name,
         encode_kwargs={"normalize_embeddings": True},
-        model_kwargs={"trust_remote_code": True},
+        model_kwargs={
+            "trust_remote_code": True,
+            "local_files_only": offline,  # << KEY LINE
+        },
     )
 
 

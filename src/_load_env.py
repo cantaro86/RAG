@@ -1,9 +1,29 @@
 import os
+import socket
 from pathlib import Path
 
 import torch
 import yaml
 from rich.console import Console
+
+
+def is_online_fast() -> bool:
+    try:
+        socket.create_connection(("huggingface.co", 443), timeout=0.25)
+        return True
+    except OSError:
+        return False
+
+
+ONLINE: bool = is_online_fast()
+
+if not ONLINE:
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
+
+#####################################################################################
+
 
 console = Console()
 USE_MPS = torch.backends.mps.is_available()

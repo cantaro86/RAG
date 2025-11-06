@@ -2,9 +2,9 @@ import os
 
 import torch
 from langchain_huggingface import HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
-from ._load_env import DEVICE, console
+from ._load_env import DEVICE, ONLINE, cfg, console
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -17,15 +17,24 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
     """
     Build a HuggingFace LLM pipeline with proper conversation handling.
     """
+    offline = not (ONLINE and getattr(cfg, "online", True))
+
     console.print(f"Loading LLM: [bold]{model_name}[/bold] on device [bold]{DEVICE}[/bold]")
     logger.info(f"Loading LLM: {model_name} on device {DEVICE}")
+    console.print("Mode: " + ("online" if not offline else "offline"))
 
-    tok = AutoTokenizer.from_pretrained(model_name, token=os.environ.get("HF_TOKEN"))
+    tok = AutoTokenizer.from_pretrained(
+        model_name,
+        token=os.environ.get("HF_TOKEN"),
+        local_files_only=offline,
+    )
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         token=os.environ.get("HF_TOKEN"),
         device_map="auto",
         torch_dtype=torch.float16 if DEVICE in ("cuda", "mps") else torch.float32,
+        local_files_only=offline,
     )
 
     if DEVICE == "mps":
@@ -86,3 +95,14 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
             return self
 
     return SimpleLLM(invoke)
+
+
+def load_translator(repo_id: str, task: str = "translation"):
+    if ONLINE and getattr(cfg, "online", True):
+        logger.info(f"[HF] Online → loading {repo_id} normally")
+        return pipeline(task, model=repo_id)
+    else:
+        logger.info(f"[HF] Offline → loading {repo_id} from local cache")
+        tok = AutoTokenizer.from_pretrained(repo_id, local_files_only=True)
+        mod = AutoModelForSeq2SeqLM.from_pretrained(repo_id, local_files_only=True)
+        return pipeline(task, model=mod, tokenizer=tok)

@@ -2,13 +2,13 @@ import os
 import sys
 
 import src._load_env as _  # noqa: F401  # isort: skip
-from src._load_env import Config, cfg, console  # noqa: F401  # isort: skip
+from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
 from src.agent_prompts import prompt_general, prompt_rag, prompt_rewrite_medical, prompt_validate_medical
-from src.bilingual_question import BilingualQuestion
+from src.bilingual_question import BilingualQuestion, init_translators
 from src.build_faiss import build_faiss_index, load_vectorstore
 from src.graph import RAGContext, build_agent_graph
 from src.llm_build import build_llm_pipe
@@ -66,6 +66,7 @@ def interactive_loop(cfg: Config):
             print()
             break
         if question.strip().lower() in {"exit", "quit", "q", "esci"}:
+            logger.info("User exited the program session id=%s", thread_id)
             break
 
         try:
@@ -103,6 +104,17 @@ def interactive_loop(cfg: Config):
 
 def main():
     logger.info(f"Using HF cache dir: {cfg.hf_home}")
+    logger.info(f"The network connectivity is: {'online' if ONLINE else 'offline'}")
+    logger.info(f"Online flag is set to: {getattr(cfg, 'online', True)}")
+
+    try:
+        logger.info("Warming up translators...")
+        init_translators()
+        logger.info("Translators ready.")
+    except Exception as e:
+        logger.error(f"Failed to initialize translators: {e}")
+        console.print("[red]Failed to initialize translators. Check configuration or models.[/red]")
+        return
 
     # Rebuild FAISS index if requested
     if getattr(cfg, "reindex", False):

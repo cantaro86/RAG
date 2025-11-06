@@ -1,11 +1,12 @@
 import os
 import urllib
+from functools import lru_cache
 
 import fasttext
 from langdetect import detect_langs
-from transformers import pipeline
 
 from ._load_env import cfg
+from .llm_build import load_translator
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -30,8 +31,18 @@ except Exception as e:
 
 logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
 
-translator_it_en = pipeline("translation", model=cfg.translate_model_it_en)
-translator_en_it = pipeline("translation", model=cfg.translate_model_en_it)
+# -------------------------
+
+
+@lru_cache(maxsize=1)
+def _load_translators():
+    # loaded once, on first use
+    return load_translator(cfg.translate_model_it_en), load_translator(cfg.translate_model_en_it)
+
+
+def init_translators():
+    """Warm up translators at startup. Returns (it_en, en_it)."""
+    return _load_translators()
 
 
 class BilingualQuestion:
@@ -84,6 +95,8 @@ class BilingualQuestion:
 
         if self.lang not in ("it", "en"):
             raise ValueError(f"Unsupported language '{self.lang}'. Only 'it' and 'en' are supported.")
+
+        translator_it_en, translator_en_it = _load_translators()
 
         # Translate
         if self.lang == "it":
