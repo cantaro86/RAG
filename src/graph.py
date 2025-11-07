@@ -71,12 +71,12 @@ def medical_router(state, answer_validation):
     label = answer_validation.invoke({"question": q})["score"].strip().lower()
 
     if label not in ("medical", "general"):
-        logger.debug("not in medical or general")
+        logger.debug("Not in medical or general")
         label = "general"
 
     # *** continuity condition ***
     if label == "general" and prev_domain == "medical":
-        logger.debug("continuity condition triggered")
+        logger.debug("Continuity condition triggered")
         label = "medical"
 
     logger.info(f"Medical evaluation: {label}")
@@ -193,6 +193,7 @@ def transform_query(state, question_rewriter):
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question, "history": hist})
+    logger.debug(f"Counter {state['rewrite_count']}. Transformed question: {better_question}")
     return {**state, "question": better_question}
 
 

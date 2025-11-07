@@ -86,7 +86,6 @@ def interactive_loop(cfg: Config):
             for output in agent.stream(agent_input, config=config):
                 for _key, value in output.items():
                     logger.debug(f"Key: {_key}")
-                    logger.debug(f"Value: {value}")
                     last_output = value
 
             # Final generation

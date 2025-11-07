@@ -1,10 +1,17 @@
 import os
 import socket
+import warnings
 from pathlib import Path
 
 import torch
 import yaml
 from rich.console import Console
+
+warnings.filterwarnings(
+    "ignore",
+    message="You seem to be using the pipelines sequentially on GPU. "
+    "In order to maximize efficiency please use a dataset",
+)
 
 
 def is_online_fast() -> bool:
