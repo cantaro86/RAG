@@ -106,6 +106,11 @@ class BilingualQuestion:
             self.en = self.text
             self.it = translator_en_it(self.text)[0]["translation_text"]
 
+    def translate_to_italian(self, text: str) -> str:
+        """Assume the input is in English"""
+        text_it = _load_translators()[1](text.strip())[0]["translation_text"]
+        return text_it
+
     # -------------------------
     # 🔍 Detection Methods
     # -------------------------

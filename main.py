@@ -90,7 +90,12 @@ def interactive_loop(cfg: Config):
 
             # Final generation
             if last_output and isinstance(last_output, dict) and "generation" in last_output:
-                console.print(last_output["generation"])
+                if quest.lang == "it":
+                    # Translate answer back to Italian
+                    answer_it = quest.translate_to_italian(last_output["generation"])
+                    console.print(answer_it)
+                else:
+                    console.print(last_output["generation"])
             else:
                 console.print("[yellow]No generation returned from agent.[/yellow]")
 

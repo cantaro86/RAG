@@ -9,8 +9,10 @@ from rich.console import Console
 
 warnings.filterwarnings(
     "ignore",
-    message="You seem to be using the pipelines sequentially on GPU. "
-    "In order to maximize efficiency please use a dataset",
+    message=(
+        r"You seem to be using the pipelines sequentially on GPU\."
+        r" In order to maximize efficiency please use a dataset"
+    ),
 )
 
 

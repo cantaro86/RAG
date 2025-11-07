@@ -76,17 +76,19 @@ prompt_rewrite_medical = PromptTemplate(
 to improve information retrieval.
 
 Your task:
+- **If the last question introduces a new topic unrelated to the history, do not rewrite it. Return it unchanged.**
 - Given the conversation history and the user's last question, rewrite the question so that it is fully explicit
 and unambiguous.
 - Replace pronouns like "their", "they", "it", "this", etc. with the actual referenced entity from the history.
+Do not add new information.
 - Rephrase the question **only if necessary** to make it clearer and more likely to match relevant documents.
 - Do not change its meaning, specificity, or focus. Keep the topic identical.
+- **Keep the question short and concise.**
 - Produce only the question, no introductions, explanations, lists, or multiple options.
 
 Question: {question}
 
 Conversation history (oldest first): {history}
-
 """,
     input_variables=["question", "history"],
 )
