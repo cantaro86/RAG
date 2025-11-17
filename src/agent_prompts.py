@@ -10,13 +10,39 @@ prompt_validate_medical = PromptTemplate(
     QUESTION:
     {question}
 
-    Return "medical" if the question is about medicine, diseases, colonoscopy, polyps, CT colonography,
-    biopsy, radiology, gastroenterology, etc.
+    Return "medical" if the question is about medicine, diseases, colonoscopy, polyps, colonography,
+    colon-TC, medical exam topics, etc.
     Otherwise return: "general".
 
     Respond ONLY with JSON: {{"score": "medical"}} or {{"score": "general"}}.
     """,
     input_variables=["question"],
+)
+
+
+prompt_topic = PromptTemplate(
+    template="""You are a topic continuity classifier.
+
+You must decide ONLY ONE THING:
+
+Does the user's NEW QUESTION refer to the SAME topic as the previous conversation?
+
+Definition:
+- SAME TOPIC: the new question is about the same entity, thing, medical concept, subject that was discussed.
+- NEW TOPIC: the new question is about something else completely.
+
+Respond with exactly one of these two strings:
+"SAME_TOPIC" or "NEW_TOPIC"
+
+Conversation History (oldest first):
+{history}
+
+New question:
+{question}
+
+Answer:
+""",
+    input_variables=["history", "question"],
 )
 
 

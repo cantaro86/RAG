@@ -7,7 +7,7 @@ from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: s
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
-from src.agent_prompts import prompt_general, prompt_rag, prompt_rewrite_medical, prompt_validate_medical
+from src.agent_prompts import prompt_general, prompt_rag, prompt_rewrite_medical, prompt_topic, prompt_validate_medical
 from src.bilingual_question import BilingualQuestion, init_translators
 from src.build_faiss import build_faiss_index, load_vectorstore
 from src.graph import RAGContext, build_agent_graph
@@ -38,12 +38,14 @@ def interactive_loop(cfg: Config):
     parse_json = RunnableLambda(extract_last_json)
 
     answer_validation = prompt_validate_medical | llm_runnable | clean_answer | parse_json
+    topic_continuity_classifier = prompt_topic | llm_runnable | clean_answer | StrOutputParser()
     chain_general = prompt_general | llm_runnable | clean_answer | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | clean_answer | StrOutputParser()
     question_rewriter = prompt_rewrite_medical | llm_runnable | clean_answer | StrOutputParser()
 
     ctx = RAGContext(
         answer_validation=answer_validation,
+        topic_continuity_classifier=topic_continuity_classifier,
         chain_general=chain_general,
         retriever=retriever,
         rag_chain=rag_chain,

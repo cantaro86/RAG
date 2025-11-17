@@ -3,6 +3,7 @@ from dataclasses import dataclass, fields
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
+from scipy.special import expit
 
 from ._load_env import cfg
 from .bilingual_question import BilingualQuestion
@@ -15,6 +16,7 @@ logger = Logger.get_logger(__name__)
 @dataclass
 class RAGContext:
     answer_validation: object
+    topic_continuity_classifier: object
     retriever: object
     rag_chain: object
     chain_general: object
@@ -84,6 +86,25 @@ def medical_router(state, answer_validation):
     return {**state, "domain": label, "last_domain": label}
 
 
+def topic_detector(state, topic_continuity_classifier):
+    """
+    Decide whether the new question belongs to the same topic as the recent conversation.
+    """
+
+    question = state["question"]
+    hist = format_history(state.get("messages", []))
+
+    # take only last 3 turns (shorter = sharper signal)
+    short_history = hist[-3:]
+
+    topic = topic_continuity_classifier.invoke({"question": question, "history": short_history})
+
+    logger.debug(f"Topic continuity evaluation: {topic}")
+
+    # topic is either "same_topic" or "new_topic"
+    return {**state, "topic_status": topic}
+
+
 def retrieve_and_filter(state, retriever):
     logger.info("---RETRIEVE + FILTER---")
     question = state["question"]
@@ -99,8 +120,6 @@ def retrieve_and_filter(state, retriever):
 
     # Debug info
     if logger.level <= logging.DEBUG:
-        from scipy.special import expit
-
         score_prob = []
         for d in all_docs:
             score_prob.append([d.metadata["rerank_score"], expit(d.metadata["rerank_score"])])
@@ -193,7 +212,7 @@ def transform_query(state, question_rewriter):
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question, "history": hist})
-    logger.debug(f"Counter {state['rewrite_count']}. Transformed question: {better_question}")
+    logger.debug(f"⚠️ Counter {state['rewrite_count']}. Transformed question: {better_question}")
     return {**state, "question": better_question}
 
 
