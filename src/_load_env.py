@@ -34,7 +34,7 @@ if not ONLINE:
 #####################################################################################
 
 
-console = Console()
+console = Console(record=True, width=120, force_terminal=False)
 USE_MPS = torch.backends.mps.is_available()
 DEVICE = "mps" if USE_MPS else ("cuda" if torch.cuda.is_available() else "cpu")
 

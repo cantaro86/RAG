@@ -9,6 +9,7 @@ from ._load_env import cfg
 from .bilingual_question import BilingualQuestion
 from .loggers import Logger
 from .state import GraphState
+from .utils import print_sources
 
 logger = Logger.get_logger(__name__)
 
@@ -117,14 +118,17 @@ def retrieve_and_filter(state, retriever):
     all_docs = docs_it + docs_en
 
     relevant_docs = [d for d in all_docs if d.metadata.get("rerank_score", 0) > cfg.threshold]
+    score_prob = []
 
     # Debug info
     if logger.level <= logging.DEBUG:
-        score_prob = []
         for d in all_docs:
             score_prob.append([d.metadata["rerank_score"], expit(d.metadata["rerank_score"])])
+        sources_table = print_sources(relevant_docs)
+
     logger.debug(f"Retrieved {len(all_docs)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
     logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
+    logger.debug(f"Top sources:\n{sources_table}")
 
     if relevant_docs:
         logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")

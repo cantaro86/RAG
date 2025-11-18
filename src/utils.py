@@ -1,5 +1,11 @@
 import json
+import os
 import re
+
+from langchain.schema import Document
+from rich.table import Table as RichTable
+
+from src._load_env import console
 
 from .loggers import Logger
 
@@ -44,3 +50,20 @@ def extract_answer_text(raw_text: str):
         logger.debug("No explicit 'Answer:' section found; returning full output.")
         # If no explicit "Answer:" header, return full output
         return raw_text.strip()
+
+
+def print_sources(docs: list[Document]) -> str:
+    """
+    Create a formatted table of source documents and return it as plain text.
+    """
+    table = RichTable(title="Top Context Chunks")
+    table.add_column("#")
+    table.add_column("Source")
+    table.add_column("Page")
+    table.add_column("Chars")
+    for i, d in enumerate(docs, 1):
+        src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
+        page = str(d.metadata.get("page", "?"))
+        table.add_row(str(i), src, page, str(len(d.page_content)))
+
+    return console.export_text()
