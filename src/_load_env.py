@@ -7,6 +7,22 @@ import torch
 import yaml
 from rich.console import Console
 
+import numpy as np
+
+# Patch numpy.array for fasttext NumPy 2.x compatibility
+_original_array = np.array
+
+
+def patched_array(*args, **kwargs):
+    if "copy" in kwargs and kwargs["copy"] is False:
+        kwargs.pop("copy")
+        return np.asarray(*args, **kwargs)
+    return _original_array(*args, **kwargs)
+
+
+np.array = patched_array
+
+
 warnings.filterwarnings(
     "ignore",
     message=(

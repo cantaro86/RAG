@@ -74,6 +74,7 @@ def medical_router(state, answer_validation):
     label = answer_validation.invoke({"question": q})["score"].strip().lower()
 
     if label not in ("medical", "general"):
+        logger.debug(f"Medical router classification: {label}")
         logger.debug("Not in medical or general")
         label = "general"
 

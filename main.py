@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 
 import src._load_env as _  # noqa: F401  # isort: skip
 from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
@@ -31,7 +32,16 @@ def interactive_loop(cfg: Config):
         cfg.rerank_model if cfg.rerank else None,
         cfg.k_reranked,
     )
-    llm = build_llm_pipe(cfg.llm_model, cfg.max_new_tokens, cfg.temperature)
+    llm = build_llm_pipe(
+        cfg.llm_model,
+        cfg.max_new_tokens,
+        cfg.temperature,
+        cfg.top_p,
+        cfg.top_k,
+        cfg.repetition_penalty,
+        cfg.no_repeat_ngram_size,
+        quantization=cfg.quantization,
+    )
 
     llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
     clean_answer = RunnableLambda(extract_answer_text)
@@ -75,6 +85,7 @@ def interactive_loop(cfg: Config):
             quest = BilingualQuestion(question)
             logger.debug(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
+            logger.error(f"Error processing question: {e}")
             console.print(f"[red]Error: {e}[/red]")
             continue
 
@@ -102,16 +113,23 @@ def interactive_loop(cfg: Config):
                 console.print("[yellow]No generation returned from agent.[/yellow]")
 
         except Exception as e:
+            logger.error(f"Error during agent execution: {e}")
             console.print(f"[red]Error: {e}[/red]")
+            raise e
 
 
 # ------------------------
 
 
 def main():
+    logger.info("Starting RAG Agent")
+    logger.info(f"Python interpreter: {sys.executable}")
+    logger.info(f"Python version: {sys.version}")
     logger.info(f"Using HF cache dir: {cfg.hf_home}")
     logger.info(f"The network connectivity is: {'online' if ONLINE else 'offline'}")
     logger.info(f"Online flag is set to: {getattr(cfg, 'online', True)}")
+
+    logger.debug(f"Configuration: {cfg.__dict__}")
 
     try:
         logger.info("Warming up translators...")
@@ -142,4 +160,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        sys.exit(1)

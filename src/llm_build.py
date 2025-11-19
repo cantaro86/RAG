@@ -10,12 +10,38 @@ from .loggers import Logger
 logger = Logger.get_logger(__name__)
 
 
+# Import based on device availability
+if DEVICE == "cuda":
+    from transformers import BitsAndBytesConfig
+elif DEVICE == "mps":
+    try:
+        from mlx_lm import load, generate
+        from mlx_lm.sample_utils import make_sampler, make_logits_processors
+
+        MLX_AVAILABLE = True
+    except ImportError:
+        MLX_AVAILABLE = False
+
+
 # ------------------------
 # LLM pipeline
 # ------------------------
-def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> HuggingFacePipeline:
+def build_llm_pipe(
+    model_name: str,
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+    top_k: int,
+    repetition_penalty: float,
+    no_repeat_ngram_size: int,
+    quantization: bool = False,
+) -> HuggingFacePipeline:
     """
     Build a HuggingFace LLM pipeline with proper conversation handling.
+    Supports quantization via:
+    - BitsAndBytes (CUDA)
+    - MLX (Apple Silicon/MPS)
+    - Standard loading (no quantization)
     """
     offline = not (ONLINE and getattr(cfg, "online", True))
 
@@ -29,26 +55,93 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
         local_files_only=offline,
     )
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        token=os.environ.get("HF_TOKEN"),
-        device_map="auto",
-        torch_dtype=torch.float16 if DEVICE in ("cuda", "mps") else torch.float32,
-        local_files_only=offline,
-    )
+    # === OPTION 1: CUDA with BitsAndBytes quantization ===
+    if quantization and DEVICE == "cuda":
+        logger.info("Using BitsAndBytes 4-bit quantization (CUDA)")
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            token=os.environ.get("HF_TOKEN"),
+            device_map="auto",
+            quantization_config=quantization_config,
+            local_files_only=offline,
+        )
+        use_mlx = False
 
-    if DEVICE == "mps":
-        model.to("mps")
+    # === OPTION 2: MPS with MLX quantization ===
+    elif quantization and DEVICE == "mps":
+        if MLX_AVAILABLE:
+            logger.info("Using MLX quantization (Apple Silicon)")
+            # Load model with MLX (supports quantization natively)
+            model, tokenizer = load(model_name)
+            tok = tokenizer  # Use MLX's tokenizer
+            use_mlx = True
+        else:
+            logger.warning("⚠️ MLX not available. Install with: pip install mlx mlx-lm")
+            logger.info("Falling back to torch.float16 on MPS")
+            model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                token=os.environ.get("HF_TOKEN"),
+                device_map="auto",
+                dtype=torch.float16,
+                low_cpu_mem_usage=True,
+                local_files_only=offline,
+            )
+            model.to("mps")
+            use_mlx = False
 
-    gen = pipeline(
-        task="text-generation",
-        model=model,
-        tokenizer=tok,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        do_sample=temperature > 0,
-        pad_token_id=tok.eos_token_id,
-    )
+    # === OPTION 3: Standard loading (no quantization) ===
+    else:
+        logger.info("Loading model without quantization")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            token=os.environ.get("HF_TOKEN"),
+            device_map="auto",
+            dtype=torch.float16 if DEVICE in ("cuda", "mps") else torch.float32,  # before it was torch_dtype
+            local_files_only=offline,
+        )
+
+        if DEVICE == "mps":
+            model.to("mps")
+        use_mlx = False
+
+    # === Build pipeline based on backend ===
+    if use_mlx:
+        # MLX-based generation wrapper
+        def mlx_generate(prompt, **kwargs):
+            # Create sampler with temperature and top_p
+            sampler = make_sampler(temp=temperature, top_p=top_p)
+
+            # Create logits processors for repetition penalty
+            logits_processors = make_logits_processors(repetition_penalty=repetition_penalty)
+
+            response = generate(
+                model,
+                tok,  # Using tok as you assigned tokenizer to tok
+                prompt=prompt,
+                max_tokens=max_new_tokens,
+                sampler=sampler,
+                logits_processors=logits_processors,
+            )
+            return [{"generated_text": response}]
+
+        gen = mlx_generate
+
+    else:
+        # Standard HuggingFace pipeline
+        gen = pipeline(
+            task="text-generation",
+            model=model,
+            tokenizer=tok,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            do_sample=temperature > 0,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            pad_token_id=tok.eos_token_id,
+        )
 
     def invoke(messages):
         # Convert all messages to a consistent format
@@ -73,14 +166,10 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
                 except Exception:
                     formatted_messages.append({"role": "user", "content": str(msg)})
 
-        # DEBUG: Print what we're sending to the model
-        logger.debug("=== FORMATTED MESSAGES FOR MODEL ===")
-        for i, msg in enumerate(formatted_messages):
-            logger.debug(f"{i}: {msg['role']}: {msg['content']}")
-        logger.debug("=====================================")
-
         # Apply Mistral chat template
         prompt = tok.apply_chat_template(formatted_messages, tokenize=False, add_generation_prompt=True)
+        # DEBUG: Print what we're sending to the model
+        logger.debug(f"🔍 PROMPT FROM apply_chat_template:\n{prompt}\n")
 
         # Run generation
         result = gen(prompt, return_full_text=False)[0]["generated_text"]
@@ -98,6 +187,10 @@ def build_llm_pipe(model_name: str, max_new_tokens: int, temperature: float) -> 
 
 
 def load_translator(repo_id: str, task: str = "translation"):
+    """
+    Load translation model using standard transformers.
+    Translation models are small and don't need MLX quantization.
+    """
     if ONLINE and getattr(cfg, "online", True):
         logger.info(f"[HF] Online → loading {repo_id} normally")
         return pipeline(task, model=repo_id)
@@ -105,4 +198,10 @@ def load_translator(repo_id: str, task: str = "translation"):
         logger.info(f"[HF] Offline → loading {repo_id} from local cache")
         tok = AutoTokenizer.from_pretrained(repo_id, local_files_only=True)
         mod = AutoModelForSeq2SeqLM.from_pretrained(repo_id, local_files_only=True)
+
+        # Move to MPS for acceleration
+        if DEVICE == "mps":
+            mod = mod.to("mps")
+            logger.info("Translation model moved to MPS")
+
         return pipeline(task, model=mod, tokenizer=tok)

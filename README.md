@@ -18,3 +18,13 @@ ssh -N -L 5643:dgx01:5643 dgx01
 
 
 ![AI AGENT](graph.png)
+
+
+pip install fasttext
+pip install langdetect
+
+python3 -m pip install --upgrade pip setuptools wheel
+python3 -m pip install sentencepiece
+pip install sacremoses
+pip install bitsandbytes
+pip install mlx mlx-lm

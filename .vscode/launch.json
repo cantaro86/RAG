@@ -15,6 +15,20 @@
                     "remoteRoot": "/home/cantarutti/RAG"
                 }
             ]
+        },
+        {
+            "name": "Mac: RAG Agent - Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "${command:python.interpreterPath}",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "HF_TOKEN": "${env:HF_TOKEN}",
+                "DEVICE": "mps"
+            }
         }
     ]
 }
