@@ -3,11 +3,10 @@ import socket
 import warnings
 from pathlib import Path
 
+import numpy as np
 import torch
 import yaml
 from rich.console import Console
-
-import numpy as np
 
 # Patch numpy.array for fasttext NumPy 2.x compatibility
 _original_array = np.array

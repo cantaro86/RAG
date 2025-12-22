@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from langchain.schema import Document
+from langchain_core.documents import Document
 from rich.table import Table as RichTable
 
 from src._load_env import console

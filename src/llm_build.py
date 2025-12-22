@@ -15,8 +15,8 @@ if DEVICE == "cuda":
     from transformers import BitsAndBytesConfig
 elif DEVICE == "mps":
     try:
-        from mlx_lm import load, generate
-        from mlx_lm.sample_utils import make_sampler, make_logits_processors
+        from mlx_lm import generate, load
+        from mlx_lm.sample_utils import make_logits_processors, make_sampler
 
         MLX_AVAILABLE = True
     except ImportError:

@@ -3,7 +3,7 @@
 # ------------------------
 
 
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 prompt_validate_medical = PromptTemplate(
     template="""Classify the USER QUESTION.

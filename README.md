@@ -28,3 +28,8 @@ python3 -m pip install sentencepiece
 pip install sacremoses
 pip install bitsandbytes
 pip install mlx mlx-lm
+
+
+
+We use faiss-cpu, but if we really want faiss gpu we can:
+conda install -c pytorch -c nvidia faiss-gpu=1.8.0  # H100 compatible

@@ -1,5 +1,5 @@
-from langchain.retrievers import ContextualCompressionRetriever
-from langchain.retrievers.document_compressors import CrossEncoderReranker
+from langchain_classic.retrievers import ContextualCompressionRetriever
+from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders.base import BaseCrossEncoder
 from langchain_community.vectorstores import FAISS
 from sentence_transformers import CrossEncoder
