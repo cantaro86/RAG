@@ -1,0 +1,15 @@
+[flake8]
+ignore = E203,
+         E266,
+         E302,
+         E303,
+         E704,
+         E305
+; too many leading #
+; 	E203,  # E203: whitespace before ':'
+; 	W503  # W503: line break before binary operator
+max-line-length = 120
+
+; this configuration file works when I run the command
+; flake .
+; If I "run linting" I already have the configuration in settings.json
