@@ -120,5 +120,7 @@ def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
                 logger.warning("No GPU detected by FAISS. Using CPU index.")
         except ImportError:
             logger.warning("FAISS GPU not available. Using CPU index.")
+    else:
+        logger.info("Using FAISS index on CPU as per configuration.")
 
     return vs

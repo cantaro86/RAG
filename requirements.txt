@@ -12,6 +12,7 @@ langdetect
 langgraph
 numpy>=2.4.0
 pre-commit
+pymupdf
 pytest
 rich
 ruff
