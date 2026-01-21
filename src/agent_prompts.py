@@ -5,21 +5,6 @@
 
 from langchain_core.prompts import PromptTemplate
 
-prompt_validate_medical = PromptTemplate(
-    template="""Classify the USER QUESTION.
-    QUESTION:
-    {question}
-
-    Return "medical" if the question is about medicine, diseases, colonoscopy, polyps, colonography,
-    colon-TC, medical exam topics, etc.
-    Otherwise return: "general".
-
-    Respond ONLY with JSON: {{"score": "medical"}} or {{"score": "general"}}.
-    """,
-    input_variables=["question"],
-)
-
-
 prompt_topic = PromptTemplate(
     template="""You are a topic continuity classifier.
 
@@ -31,30 +16,16 @@ Definition:
 - SAME TOPIC: the new question is about the same entity, thing, medical concept, subject that was discussed.
 - NEW TOPIC: the new question is about something else completely.
 
-Respond with exactly one of these two strings:
-"SAME_TOPIC" or "NEW_TOPIC"
+Respond with EXACTLY one of these two strings:
+"SAME" or "NEW"
+Do NOT add introductions, explanations, lists, or multiple options.
 
 Conversation History (oldest first):
 {history}
 
 New question:
 {question}
-
-Answer:
 """,
-    input_variables=["history", "question"],
-)
-
-
-prompt_general = PromptTemplate(
-    template="""You are a scientific assistant. Answer the question accurately and concisely.
-
-    Conversation history (most recent first):
-    {history}
-
-    Current question:
-    {question}
-    """,
     input_variables=["history", "question"],
 )
 
@@ -72,27 +43,6 @@ prompt_rag = PromptTemplate(
     {question}
     """,
     input_variables=["history", "context", "question"],
-)
-
-
-# Hallucination check
-prompt_hallucination = PromptTemplate(
-    template="""You are a grader assessing whether an answer is grounded in the retrieved documents.
-    Here are the documents:
-    {documents}
-    Here is the answer: {generation}
-    Respond ONLY with JSON: {{"score": "yes"}} or {{"score": "no"}}.""",
-    input_variables=["generation", "documents"],
-)
-
-
-# Usefulness check
-prompt_usefulness = PromptTemplate(
-    template="""You are a grader assessing whether an answer is useful to the user question.
-    Question: {question}
-    Answer: {generation}
-    Respond ONLY with JSON: {{"score": "yes"}} or {{"score": "no"}}.""",
-    input_variables=["generation", "question"],
 )
 
 

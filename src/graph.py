@@ -16,11 +16,9 @@ logger = Logger.get_logger(__name__)
 
 @dataclass
 class RAGContext:
-    answer_validation: object
     topic_continuity_classifier: object
     retriever: object
     rag_chain: object
-    chain_general: object
     question_rewriter: object
 
     def __post_init__(self):
@@ -36,7 +34,7 @@ class RAGContext:
 
 
 def push_memory(state, user_q, assistant_a):
-    msgs = state.get("messages", [])
+    msgs = state.get("history", [])
 
     msgs.append({"role": "user", "content": user_q})
     msgs.append({"role": "assistant", "content": assistant_a})
@@ -46,12 +44,12 @@ def push_memory(state, user_q, assistant_a):
     return msgs
 
 
-def format_history(messages: list[dict]):
-    if not messages:
+def format_history(history: list[dict]):
+    if not history:
         return "No prior conversation."
     blocks = []
     # newest last (human likes chronological; model doesn’t care)
-    for m in messages[-(cfg.max_history_turns * 2) :]:  # 6 turns == 12 entries
+    for m in history[-(cfg.max_history_turns * 2) :]:  # 6 turns == 12 entries
         role = "Q" if m["role"] == "user" else "A"
         blocks.append(f"{role}: {m['content']}")
     return "\n".join(blocks)
@@ -62,30 +60,14 @@ def format_history(messages: list[dict]):
 # ------------------------
 
 
-def medical_router(state, answer_validation):
-    """Decide whether the question is medical or general.
-    We use continuity classification to classify follow-up questions.
-    """
+def init_first_question(state: GraphState) -> dict:
+    """Check if this is the first question in the conversation"""
 
-    logger.info("--- VALIDATE MEDICAL QUESTION ---")
-    q = state["question"]
-    prev_domain = state.get("last_domain", "general")
+    hist = state.get("history", [])
+    first = len(hist) == 0
+    logger.debug(f"NODE: init_first_question {first}")
 
-    label = answer_validation.invoke({"question": q})["score"].strip().lower()
-
-    if label not in ("medical", "general"):
-        logger.debug(f"Medical router classification: {label}")
-        logger.debug("Not in medical or general")
-        label = "general"
-
-    # *** continuity condition ***
-    if label == "general" and prev_domain == "medical":
-        logger.debug("Continuity condition triggered")
-        label = "medical"
-
-    logger.info(f"Medical evaluation: {label}")
-
-    return {**state, "domain": label, "last_domain": label}
+    return {**state, "first_question": first}
 
 
 def topic_detector(state, topic_continuity_classifier):
@@ -94,21 +76,19 @@ def topic_detector(state, topic_continuity_classifier):
     """
 
     question = state["question"]
-    hist = format_history(state.get("messages", []))
+    hist = format_history(state.get("history", []))
 
-    # take only last 3 turns (shorter = sharper signal)
-    short_history = hist[-3:]
+    topic = topic_continuity_classifier.invoke({"question": question, "history": hist})
 
-    topic = topic_continuity_classifier.invoke({"question": question, "history": short_history})
-
+    logger.debug("--- TOPIC CONTINUITY CLASSIFIER---")
     logger.debug(f"Topic continuity evaluation: {topic}")
 
-    # topic is either "same_topic" or "new_topic"
+    # topic is either "SAME" or "NEW"
     return {**state, "topic_status": topic}
 
 
 def retrieve_and_filter(state, retriever):
-    logger.info("---RETRIEVE + FILTER---")
+    logger.debug("---RETRIEVE + FILTER---")
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
 
@@ -124,7 +104,9 @@ def retrieve_and_filter(state, retriever):
     # Debug info
     if logger.level <= logging.DEBUG:
         for d in all_docs:
-            score_prob.append([d.metadata["rerank_score"], expit(d.metadata["rerank_score"])])
+            score_prob.append(
+                [round(d.metadata["rerank_score"], 2), float(round(expit(d.metadata["rerank_score"]), 2))]
+            )
         sources_table = print_sources(relevant_docs)
 
     logger.debug(f"Retrieved {len(all_docs)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
@@ -134,47 +116,19 @@ def retrieve_and_filter(state, retriever):
     if relevant_docs:
         logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
         return {
+            **state,
             "documents": relevant_docs,
-            "question": question,
             "rewrite_count": rewrite_count,
             "has_docs": True,
         }
     else:
         logger.info(f"⚠️ No relevant docs found (attempt {rewrite_count + 1})")
         return {
+            **state,
             "documents": [],
-            "question": question,
             "rewrite_count": rewrite_count + 1,
             "has_docs": False,
         }
-
-
-def generate(state, chain_general):
-    """
-    Generate answer
-
-    Args:
-        state (dict): The current graph state
-
-    Returns:
-        state (dict): New key added to state, generation, that contains LLM generation
-    """
-
-    logger.info("---GENERATE---")
-    q = state["question"]
-    hist = format_history(state.get("messages", []))
-
-    answer = chain_general.invoke({"history": hist, "question": q})
-
-    msgs = push_memory(state, q, answer)
-
-    return {
-        **state,
-        "generation": answer,
-        "rewrite_count": 0,
-        "messages": msgs,
-        "last_domain": "general",
-    }  # "last_domain" here breaks continuity condition
 
 
 def generate_with_docs(state, rag_chain):
@@ -188,16 +142,16 @@ def generate_with_docs(state, rag_chain):
         state (dict): New key added to state, generation, that contains LLM generation
     """
 
-    logger.info("---GENERATE WITH DOCS---")
+    logger.debug("---GENERATE WITH DOCS---")
     q = state["question"]
     docs = state.get("documents", [])
-    hist = format_history(state.get("messages", []))
+    hist = format_history(state.get("history", []))
 
     answer = rag_chain.invoke({"history": hist, "context": docs, "question": q})
 
     msgs = push_memory(state, q, answer)
 
-    return {**state, "generation": answer, "rewrite_count": 0, "messages": msgs}
+    return {**state, "generation": answer, "rewrite_count": 0, "history": msgs}
 
 
 def transform_query(state, question_rewriter):
@@ -211,9 +165,9 @@ def transform_query(state, question_rewriter):
         state (dict): Updates question key with a re-phrased question
     """
 
-    logger.info("---TRANSFORM QUERY---")
+    logger.debug("---TRANSFORM QUERY---")
     question = state["question"]
-    hist = format_history(state.get("messages", []))
+    hist = format_history(state.get("history", []))
 
     # Re-write question
     better_question = question_rewriter.invoke({"question": question, "history": hist})
@@ -221,9 +175,24 @@ def transform_query(state, question_rewriter):
     return {**state, "question": better_question}
 
 
+def clear_history(state: GraphState) -> dict:
+    # If topic is NEW, wipe history before retrieving
+    return {
+        **state,
+        "history": [],
+        "first_question": True,
+        "rewrite_count": 0,
+        "generation": None,
+    }
+
+
 # ------------------------
 # Agent Edges
 # ------------------------
+
+
+def route_first_question(state: GraphState) -> str:
+    return "first" if state.get("first_question", False) else "followup"
 
 
 def decide_relevance(state):
@@ -236,10 +205,26 @@ def decide_relevance(state):
     if has_docs:
         return "generate_with_docs"
     elif has_docs is False and rewrite_count >= 2:
-        logger.info("🚫 Max rewrites reached — fallback to generation without context.")
-        return "generate"
+        logger.debug("🚫 Max rewrites reached.")
+        return "end"
     else:
         return "transform_query"
+
+
+def route_on_topic(state: GraphState) -> str:
+    """
+    Must return a key present in the mapping passed to add_conditional_edges.
+    Expecting topic_status to be "SAME" or "NEW" (or e.g. SAME_TOPIC/NEW_TOPIC).
+    """
+    t = str(state.get("topic_status", "")).strip().upper()
+
+    if t in ("SAME", "SAME_TOPIC", "SAMETOPIC"):
+        return "same"
+    if t in ("NEW", "NEW_TOPIC", "NEWTOPIC"):
+        return "new"
+
+    # safe default: don't clear history
+    return "same"
 
 
 # ------------------------
@@ -252,36 +237,47 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow = StateGraph(GraphState)
 
-    workflow.add_node("medical_router", lambda state: medical_router(state, ctx.answer_validation))
+    workflow.add_node("init_first_question", init_first_question)
 
     workflow.add_node("retrieve_and_filter", lambda state: retrieve_and_filter(state, ctx.retriever))
-
-    workflow.add_node("generate", lambda state: generate(state, ctx.chain_general))
 
     workflow.add_node("generate_with_docs", lambda state: generate_with_docs(state, ctx.rag_chain))
 
     workflow.add_node("transform_query", lambda state: transform_query(state, ctx.question_rewriter))
 
-    workflow.add_edge(START, "medical_router")
+    workflow.add_node("topic_detector", lambda state: topic_detector(state, ctx.topic_continuity_classifier))
+
+    workflow.add_node("clear_history", clear_history)
+
+    workflow.add_edge(START, "init_first_question")
+
+    workflow.add_edge("clear_history", "retrieve_and_filter")
 
     workflow.add_conditional_edges(
-        "medical_router",
-        lambda state: state["domain"],  # this must return "medical" or "general"
+        "init_first_question",
+        route_first_question,
         {
-            "medical": "retrieve_and_filter",
-            "general": "generate",
+            "first": "retrieve_and_filter",
+            "followup": "topic_detector",
+        },
+    )
+
+    workflow.add_conditional_edges(
+        "topic_detector",
+        route_on_topic,
+        {
+            "same": "retrieve_and_filter",
+            "new": "clear_history",
         },
     )
 
     workflow.add_conditional_edges(
         "retrieve_and_filter",
         decide_relevance,
-        {"transform_query": "transform_query", "generate": "generate", "generate_with_docs": "generate_with_docs"},
+        {"transform_query": "transform_query", "end": END, "generate_with_docs": "generate_with_docs"},
     )
-
     workflow.add_edge("transform_query", "retrieve_and_filter")
 
-    workflow.add_edge("generate", END)
     workflow.add_edge("generate_with_docs", END)
 
     agent = workflow.compile(checkpointer=checkpointer)

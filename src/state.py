@@ -17,5 +17,5 @@ class GraphState(TypedDict):
     generation: str
     documents: list[Document]
     rewrite_count: int
-    messages: list[dict]
-    last_domain: str
+    history: list[dict]
+    first_question: bool
