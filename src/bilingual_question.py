@@ -1,4 +1,5 @@
 import os
+import string
 import urllib
 from functools import lru_cache
 
@@ -46,7 +47,7 @@ def init_translators():
 
 
 class BilingualQuestion:
-    FASTTEXT_CONFIDENCE_THRESHOLD = 0.4
+    FASTTEXT_CONFIDENCE_THRESHOLD = 0.2
 
     ITALIAN_WORLDS = {
         "ciao",
@@ -125,9 +126,10 @@ class BilingualQuestion:
 
     def _detect_simple_heuristic(self, text: str) -> str:
         """Simple heuristic detection for very short text."""
-        if any(c in text.lower() for c in ["è", "é", "ò", "à", "ì", "ù"]) or text.lower() in self.ITALIAN_WORLDS:
+        clean_text = "".join(c for c in text.lower() if c not in string.punctuation)
+        if any(c in text.lower() for c in ["è", "é", "ò", "à", "ì", "ù"]) or clean_text in self.ITALIAN_WORLDS:
             return "it"
-        if text.lower() in self.ENGLISH_WORDS:
+        if clean_text in self.ENGLISH_WORDS:
             return "en"
 
     def _detect_fasttext(self, text: str) -> str:
