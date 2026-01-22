@@ -7,6 +7,7 @@ import glob
 import os
 
 import faiss
+import fitz
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
@@ -21,26 +22,74 @@ from .loggers import Logger
 logger = Logger.get_logger(__name__)
 
 
-def load_pdfs(pdf_dir: str) -> list[Document]:
+TESS_LANG_MAP: dict[str, str] = {
+    "en": "eng",
+    "it": "ita",
+}
+
+
+def _detect_lang_safe(text: str) -> str:
+    try:
+        if text and len(text) >= 50:
+            return detect(text)
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _tess_lang(lang: str) -> str:
+    return TESS_LANG_MAP.get(lang, "eng")
+
+
+def load_pdfs(pdf_dir: str, ocr: bool, ocr_dpi: int) -> list[Document]:
     paths = []
     for ext in ("*.pdf", "*.PDF"):
         paths.extend(glob.glob(os.path.join(pdf_dir, ext)))
     if not paths:
         raise FileNotFoundError(f"No PDFs found in {pdf_dir}")
 
+    if not ocr:
+        docs: list[Document] = []
+        for p in tqdm(paths, desc="Loading PDFs (no OCR)"):
+            loader = PyMuPDFLoader(p, mode="page")
+            ds = loader.load()
+            for d in ds:
+                d.metadata = d.metadata or {}
+                d.metadata["source"] = p
+                lang = _detect_lang_safe(d.page_content)
+                d.metadata["language"] = lang
+                d.metadata["ocr_used"] = False
+            docs.extend(ds)
+        return docs
+
+    # ---- OCR every page (in-memory) using PyMuPDF OCR TextPage ----
+    logger.info("OCR enabled: performing OCR on every page.")
     docs: list[Document] = []
-    for p in tqdm(paths, desc="Loading PDFs"):
-        loader = PyMuPDFLoader(p)
-        ds = loader.load()
-        for d in ds:
-            d.metadata = d.metadata or {}
-            d.metadata["source"] = p
-            try:
-                lang = detect(d.page_content)
-            except Exception:
-                lang = "unknown"
-            d.metadata["language"] = lang
-        docs.extend(ds)
+    for p in tqdm(paths, desc="Loading PDFs (OCR every page)"):
+        pdf = fitz.open(p)
+        for page_index in range(pdf.page_count):
+            page = pdf[page_index]
+
+            # Use normal extraction only to choose OCR language
+            normal_text = page.get_text("text") or ""
+            lang = _detect_lang_safe(normal_text)
+
+            # Full-page OCR: build OCR TextPage then extract from it
+            tp = page.get_textpage_ocr(language=_tess_lang(lang), dpi=ocr_dpi, full=True)
+            text = page.get_text("text", textpage=tp) or ""
+
+            docs.append(
+                Document(
+                    page_content=text,
+                    metadata={
+                        "source": p,
+                        "page": page_index,
+                        "language": lang,
+                        "ocr_used": True,
+                    },
+                )
+            )
+        pdf.close()
     return docs
 
 
@@ -91,7 +140,7 @@ def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
 def build_faiss_index(cfg: Config) -> None:
     console.rule("[bold]Indexing PDFs -> FAISS")
     logger.info("Indexing PDFs -> FAISS")
-    docs = load_pdfs(cfg.pdf_dir)
+    docs = load_pdfs(cfg.pdf_dir, cfg.ocr, cfg.ocr_dpi)
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
     logger.info("Loaded %d pages -> %d chunks.", len(docs), len(chunks))
