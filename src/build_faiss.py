@@ -5,6 +5,7 @@
 
 import glob
 import os
+from concurrent.futures import ProcessPoolExecutor
 
 import faiss
 import fitz
@@ -41,17 +42,66 @@ def _tess_lang(lang: str) -> str:
     return TESS_LANG_MAP.get(lang, "eng")
 
 
-def load_pdfs(pdf_dir: str, ocr: bool, ocr_dpi: int) -> list[Document]:
-    paths = []
+def _ocr_one_page(task: tuple[str, int, str, int, str | None]) -> tuple[str, int, str, str, str | None]:
+    """
+    Worker task.
+    Returns: (pdf_path, page_index, lang, ocr_text, ocr_error)
+    """
+    pdf_path, page_index, lang, ocr_dpi, tessdata = task
+    try:
+        doc = fitz.open(pdf_path)
+        page = doc[page_index]
+        tp = page.get_textpage_ocr(
+            language=_tess_lang(lang),
+            dpi=ocr_dpi,
+            full=True,
+            tessdata=tessdata,  # can be None
+        )
+        text = page.get_text("text", textpage=tp) or ""
+        doc.close()
+        return pdf_path, page_index, lang, text, None
+    except Exception as e:
+        # Return empty text + error; caller may fallback if desired
+        return pdf_path, page_index, lang, "", repr(e)
+
+
+def load_pdfs(
+    pdf_dir: str,
+    *,
+    ocr: bool = False,
+    mode: str = "page",
+    pages_delimiter: str = "\n\f\n",
+    ocr_dpi: int = 150,
+    ocr_workers: int = 8,
+    ocr_chunksize: int = 2,
+    tessdata: str | None = None,
+) -> list[Document]:
+    """
+    Load PDFs into LangChain Documents.
+
+    - ocr=False: use LangChain PyMuPDFLoader with mode/page_delimiter support.
+    - ocr=True: full-page OCR with PyMuPDF + multiprocessing, supports mode="page" or mode="single".
+    - ocr_workers: how many processes (parallel OCR workers).
+        - ocr_chunksize: how many tasks to give each worker at a time.
+    - tessdata: path to Tesseract's tessdata directory
+    """
+
+    if mode not in ("page", "single"):
+        raise ValueError("mode must be 'page' or 'single'")
+
+    paths: list[str] = []
     for ext in ("*.pdf", "*.PDF"):
         paths.extend(glob.glob(os.path.join(pdf_dir, ext)))
     if not paths:
         raise FileNotFoundError(f"No PDFs found in {pdf_dir}")
 
+    # -------------------------
+    # No OCR: keep your old approach
+    # -------------------------
     if not ocr:
         docs: list[Document] = []
-        for p in tqdm(paths, desc="Loading PDFs (no OCR)"):
-            loader = PyMuPDFLoader(p, mode="page")
+        for p in tqdm(paths, desc=f"Loading PDFs (no OCR, mode={mode})"):
+            loader = PyMuPDFLoader(p, mode=mode, pages_delimiter=pages_delimiter)  # supports both [web:41]
             ds = loader.load()
             for d in ds:
                 d.metadata = d.metadata or {}
@@ -62,35 +112,85 @@ def load_pdfs(pdf_dir: str, ocr: bool, ocr_dpi: int) -> list[Document]:
             docs.extend(ds)
         return docs
 
-    # ---- OCR every page (in-memory) using PyMuPDF OCR TextPage ----
-    logger.info("OCR enabled: performing OCR on every page.")
-    docs: list[Document] = []
-    for p in tqdm(paths, desc="Loading PDFs (OCR every page)"):
-        pdf = fitz.open(p)
-        for page_index in range(pdf.page_count):
-            page = pdf[page_index]
+    # -------------------------
+    # OCR path: build tasks
+    # -------------------------
+    # First pass: open each PDF once to discover page_count and (optional) language guess per page
+    tasks: list[tuple[str, int, str, int, str | None]] = []
+    pdf_pagecounts: dict[str, int] = {}
 
-            # Use normal extraction only to choose OCR language
-            normal_text = page.get_text("text") or ""
+    for p in tqdm(paths, desc="Scanning PDFs (for OCR tasks)"):
+        doc = fitz.open(p)
+        pdf_pagecounts[p] = doc.page_count
+        for page_index in range(doc.page_count):
+            # cheap normal extraction just to pick OCR language
+            normal_text = doc[page_index].get_text("text") or ""
             lang = _detect_lang_safe(normal_text)
+            tasks.append((p, page_index, lang, ocr_dpi, tessdata))
+        doc.close()
 
-            # Full-page OCR: build OCR TextPage then extract from it
-            tp = page.get_textpage_ocr(language=_tess_lang(lang), dpi=ocr_dpi, full=True)
-            text = page.get_text("text", textpage=tp) or ""
+    # Run OCR in parallel (PyMuPDF recommends multiprocessing; open document in worker) [web:160]
+    results: list[tuple[str, int, str, str, str | None]] = []
+    with ProcessPoolExecutor(max_workers=ocr_workers) as ex:
+        it = ex.map(_ocr_one_page, tasks, chunksize=ocr_chunksize)
+        for r in tqdm(it, total=len(tasks), desc=f"OCR pages ({ocr_workers} workers)"):
+            results.append(r)
 
-            docs.append(
-                Document(
-                    page_content=text,
-                    metadata={
-                        "source": p,
-                        "page": page_index,
-                        "language": lang,
-                        "ocr_used": True,
-                    },
-                )
-            )
-        pdf.close()
-    return docs
+    # -------------------------
+    # Build Documents
+    # -------------------------
+    if mode == "page":
+        docs: list[Document] = []
+        for pdf_path, page_index, lang, text, err in results:
+            meta = {
+                "source": pdf_path,
+                "page": page_index,
+                "language": lang,
+                "ocr_used": err is None,
+            }
+            if err is not None:
+                meta["ocr_error"] = err
+            docs.append(Document(page_content=text, metadata=meta))
+
+        # stable ordering
+        docs.sort(key=lambda d: (d.metadata["source"], d.metadata["page"]))
+        return docs
+
+    # mode == "single": join OCR text for each PDF into one Document (cross-page chunks)
+    by_pdf: dict[str, list[tuple[int, str, str, str | None]]] = {}
+    for pdf_path, page_index, lang, text, err in results:
+        by_pdf.setdefault(pdf_path, []).append((page_index, lang, text, err))
+
+    docs_single: list[Document] = []
+    for pdf_path, pages in by_pdf.items():
+        pages.sort(key=lambda x: x[0])
+
+        # Keep lightweight page markers so you can infer page ranges later if needed.
+        joined_parts = [f"\n[PAGE {pi}]\n{txt}" for (pi, _lang, txt, _err) in pages]
+        joined_text = pages_delimiter.join(joined_parts)
+
+        # Choose a document language: first non-unknown, else unknown
+        langs = [lang_code for (_pi, lang_code, _t, _e) in pages if lang_code != "unknown"]
+        doc_lang = langs[0] if langs else "unknown"
+
+        # Track OCR errors at doc-level (optional)
+        errors = [(pi, e) for (pi, _l, _t, e) in pages if e is not None]
+
+        meta = {
+            "source": pdf_path,
+            "language": doc_lang,
+            "ocr_used": len(errors) == 0,
+            "mode": "single",
+            "pages_delimiter": pages_delimiter,
+            "page_count": pdf_pagecounts.get(pdf_path),
+        }
+        if errors:
+            meta["ocr_errors"] = errors  # page-indexed list
+
+        docs_single.append(Document(page_content=joined_text, metadata=meta))
+
+    docs_single.sort(key=lambda d: d.metadata["source"])
+    return docs_single
 
 
 def preprocess_docs(docs: list[Document]) -> list[Document]:
@@ -140,7 +240,18 @@ def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
 def build_faiss_index(cfg: Config) -> None:
     console.rule("[bold]Indexing PDFs -> FAISS")
     logger.info("Indexing PDFs -> FAISS")
-    docs = load_pdfs(cfg.pdf_dir, cfg.ocr, cfg.ocr_dpi)
+
+    docs = load_pdfs(
+        cfg.pdf_dir,
+        ocr=getattr(cfg, "ocr", False),
+        mode=getattr(cfg, "pdf_mode", "single"),  # "page" or "single"
+        pages_delimiter=getattr(cfg, "pages_delimiter", "\n\f\n"),
+        ocr_dpi=getattr(cfg, "ocr_dpi", 200),
+        ocr_workers=getattr(cfg, "ocr_workers", 2),
+        ocr_chunksize=getattr(cfg, "ocr_chunksize", 2),
+        tessdata=getattr(cfg, "tessdata", None),
+    )
+
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
     logger.info("Loaded %d pages -> %d chunks.", len(docs), len(chunks))
