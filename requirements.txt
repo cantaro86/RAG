@@ -3,10 +3,12 @@ bitsandbytes
 debugpy
 faiss-cpu
 fasttext
+gradio
 jupyter
 langchain
 langchain_community
 langchain_core
+langchain_huggingface>=1.2.0
 langchain_text_splitters
 langdetect
 langgraph
@@ -14,6 +16,7 @@ numpy>=2.4.0
 pre-commit
 pymupdf
 pytest
+pyyaml
 rich
 ruff
 sacremoses

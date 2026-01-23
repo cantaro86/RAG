@@ -33,8 +33,12 @@ pip install mlx mlx-lm
 
 We use faiss-cpu, but if we really want faiss gpu we can:
 conda install -c pytorch -c nvidia faiss-gpu=1.8.0  # H100 compatible
+This one installs numpy-base which is a numpy version 1.26.4 of conda. This may create conflicts.
 
 
 conda install -c conda-forge tesseract
 tesseract --list-langs
 export TESSDATA_PREFIX="$CONDA_PREFIX/share"
+
+
+pip install -r requirements.txt --no-cache
