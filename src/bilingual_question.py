@@ -6,7 +6,7 @@ from functools import lru_cache
 import fasttext
 from langdetect import detect_langs
 
-from ._load_env import cfg
+from ._load_env import DEVICE, cfg
 from .llm_build import load_translator
 from .loggers import Logger
 
@@ -37,8 +37,11 @@ logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
 
 @lru_cache(maxsize=1)
 def _load_translators():
-    # loaded once, on first use
-    return load_translator(cfg.translate_model_it_en), load_translator(cfg.translate_model_en_it)
+    """
+    Load single NLLB model for bidirectional translation.
+    Returns (model, tokenizer) tuple - loaded once on first use.
+    """
+    return load_translator(cfg.translate_model)
 
 
 def init_translators():
@@ -46,8 +49,40 @@ def init_translators():
     return _load_translators()
 
 
+def _translate(text: str, src_lang: str, tgt_lang: str) -> str:
+    """
+    Translate text using NLLB model.
+
+    Args:
+        text: Text to translate
+        src_lang: Source language code ('ita_Latn' or 'eng_Latn')
+        tgt_lang: Target language code ('ita_Latn' or 'eng_Latn')
+    """
+    model, tokenizer = _load_translators()
+
+    # Set source language
+    tokenizer.src_lang = src_lang
+
+    # Tokenize
+    inputs = tokenizer(text, return_tensors="pt", padding=True)
+
+    # Move to device
+    if DEVICE in ["cuda", "mps"]:
+        inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+
+    # Generate translation
+    translated_tokens = model.generate(
+        **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang), max_length=512, num_beams=5
+    )
+
+    # Decode
+    return tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+
+
 class BilingualQuestion:
     FASTTEXT_CONFIDENCE_THRESHOLD = 0.2
+
+    LANG_CODES = {"it": "ita_Latn", "en": "eng_Latn"}
 
     ITALIAN_WORLDS = {
         "ciao",
@@ -97,19 +132,17 @@ class BilingualQuestion:
         if self.lang not in ("it", "en"):
             raise ValueError(f"Unsupported language '{self.lang}'. Only 'it' and 'en' are supported.")
 
-        translator_it_en, translator_en_it = _load_translators()
-
         # Translate
         if self.lang == "it":
             self.it = self.text
-            self.en = translator_it_en(self.text)[0]["translation_text"]
+            self.en = _translate(self.text, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
         else:
             self.en = self.text
-            self.it = translator_en_it(self.text)[0]["translation_text"]
+            self.it = _translate(self.text, src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
 
     def translate_to_italian(self, text: str) -> str:
         """Assume the input is in English"""
-        text_it = _load_translators()[1](text.strip())[0]["translation_text"]
+        text_it = _translate(text.strip(), src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
         return text_it
 
     # -------------------------

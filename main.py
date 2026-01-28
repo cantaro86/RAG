@@ -25,11 +25,11 @@ logger = Logger.get_logger(__name__)
 def interactive_loop(cfg: Config):
     """Interactive loop with the agent"""
     vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
-    retriever = build_retriever(
-        vs,
-        cfg.k,
-        cfg.rerank_model if cfg.rerank else None,
-        cfg.k_reranked,
+    retriever_en = build_retriever(
+        vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked, score_key="rerank_score_en"
+    )
+    retriever_it = build_retriever(
+        vs, cfg.k, cfg.rerank_model if cfg.rerank else None, cfg.k_reranked, score_key="rerank_score_it"
     )
     llm = build_llm_pipe(
         cfg.llm_model,
@@ -50,7 +50,8 @@ def interactive_loop(cfg: Config):
 
     ctx = RAGContext(
         topic_continuity_classifier=topic_continuity_classifier,
-        retriever=retriever,
+        retriever_it=retriever_it,
+        retriever_en=retriever_en,
         rag_chain=rag_chain,
         question_rewriter=question_rewriter,
     )

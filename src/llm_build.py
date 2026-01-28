@@ -186,22 +186,24 @@ def build_llm_pipe(
     return SimpleLLM(invoke)
 
 
-def load_translator(repo_id: str, task: str = "translation"):
+def load_translator(repo_id: str):
     """
-    Load translation model using standard transformers.
-    Translation models are small and don't need MLX quantization.
+    Load translation model.
+    For NLLB models, returns (model, tokenizer) tuple.
+    For legacy OPUS-MT models, returns pipeline.
     """
     if ONLINE and getattr(cfg, "online", True):
-        logger.info(f"[HF] Online → loading {repo_id} normally")
-        return pipeline(task, model=repo_id)
+        logger.info(f"[HF] Online → loading {repo_id}")
+        tokenizer = AutoTokenizer.from_pretrained(repo_id)
+        model = AutoModelForSeq2SeqLM.from_pretrained(repo_id)
     else:
         logger.info(f"[HF] Offline → loading {repo_id} from local cache")
-        tok = AutoTokenizer.from_pretrained(repo_id, local_files_only=True)
-        mod = AutoModelForSeq2SeqLM.from_pretrained(repo_id, local_files_only=True)
+        tokenizer = AutoTokenizer.from_pretrained(repo_id, local_files_only=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(repo_id, local_files_only=True)
 
-        # Move to MPS for acceleration
-        if DEVICE == "mps":
-            mod = mod.to("mps")
-            logger.info("Translation model moved to MPS")
+    # Move to device
+    if DEVICE in ["cuda", "mps"]:
+        model = model.to(DEVICE)
+        logger.info(f"Translation model moved to {DEVICE}")
 
-        return pipeline(task, model=mod, tokenizer=tok)
+    return model, tokenizer

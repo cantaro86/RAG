@@ -17,7 +17,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 from tqdm import tqdm
 
-from ._load_env import ONLINE, Config, cfg, console
+from ._load_env import DEVICE, ONLINE, Config, cfg, console
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -231,8 +231,9 @@ def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
         model_name=model_name,
         encode_kwargs={"normalize_embeddings": True},
         model_kwargs={
+            "device": DEVICE,
             "trust_remote_code": True,
-            "local_files_only": offline,  # << KEY LINE
+            "local_files_only": offline,
         },
     )
 

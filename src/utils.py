@@ -18,10 +18,17 @@ def print_sources(docs: list[Document]) -> str:
     table.add_column("Source")
     table.add_column("Page")
     table.add_column("Chars")
+    table.add_column("Rank_it")
+    table.add_column("Rank_en")
+    table.add_column("OCR")
+
     for i, d in enumerate(docs, 1):
         src = os.path.basename(d.metadata.get("source", "unknown.pdf"))
         page = str(d.metadata.get("page", "?"))
-        table.add_row(str(i), src, page, str(len(d.page_content)))
+        rank_it = d.metadata.get("rerank_score_it", -99)
+        rank_en = d.metadata.get("rerank_score_en", -99)
+        ocr = str(d.metadata.get("ocr_used", "NA"))
+        table.add_row(str(i), src, page, str(len(d.page_content)), str(rank_it), str(rank_en), ocr)
 
     # Use a plain console to capture plain text output
     plain_console = Console(width=120, color_system=None, file=None)
