@@ -4,11 +4,13 @@ import urllib
 from functools import lru_cache
 
 import fasttext
+from langchain_core.documents import Document
 from langdetect import detect_langs
 
 from ._load_env import DEVICE, cfg
 from .llm_build import load_translator
 from .loggers import Logger
+from .translate import translate_tableish_text_preserve_lines
 
 logger = Logger.get_logger(__name__)
 
@@ -77,6 +79,30 @@ def _translate(text: str, src_lang: str, tgt_lang: str) -> str:
 
     # Decode
     return tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+
+
+def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
+    model, tokenizer = _load_translators()
+
+    out = []
+    for d in docs:
+        en_text = translate_tableish_text_preserve_lines(
+            d.page_content,
+            model=model,
+            tokenizer=tokenizer,
+            src_lang="ita_Latn",
+            tgt_lang="eng_Latn",
+            device=DEVICE,
+        )
+
+        # clone doc, keep provenance
+        new_meta = dict(d.metadata)
+        new_meta["orig_lang"] = "it"
+        new_meta["translated_to"] = "en"
+        new_meta["orig_page_content"] = d.page_content
+
+        out.append(Document(page_content=en_text, metadata=new_meta))
+    return out
 
 
 class BilingualQuestion:
