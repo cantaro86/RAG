@@ -10,7 +10,7 @@ from langdetect import detect_langs
 from ._load_env import DEVICE, cfg
 from .llm_build import load_translator
 from .loggers import Logger
-from .translate import translate_tableish_text_preserve_lines
+from .translate import translate_paragraphs_by_sentences
 
 logger = Logger.get_logger(__name__)
 
@@ -86,7 +86,7 @@ def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
 
     out = []
     for d in docs:
-        en_text = translate_tableish_text_preserve_lines(
+        en_text = translate_paragraphs_by_sentences(
             d.page_content,
             model=model,
             tokenizer=tokenizer,
