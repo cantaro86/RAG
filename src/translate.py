@@ -1,6 +1,7 @@
 import re
 
 import torch
+from langchain_core.documents import Document
 
 # The best batch size is hardware-dependent.
 
@@ -60,7 +61,7 @@ def translate_paragraphs_by_sentences(
     src_lang: str,
     tgt_lang: str,
     device: str,
-    batch_size: int = 16,
+    batch_size: int = 32,
     max_input_tokens: int = 256,
     max_new_tokens: int = 256,
     num_beams: int = 4,
@@ -107,3 +108,102 @@ def translate_paragraphs_by_sentences(
         out_paras.append(" ".join(t.strip() for t in translated if t.strip()))
 
     return "\n\n".join(out_paras)
+
+
+# Run the next function as in the commented example below.
+
+# docs_it_to_en2 =  translate_docs_paragraphs_by_sentences_batched(
+#     docs_it,
+#     model=model,
+#     tokenizer=tokenizer,
+#     batch_size=32,
+#     src_lang="ita_Latn",
+#     tgt_lang="eng_Latn",
+#     device="cuda",
+#     num_beams=1)
+
+
+def translate_docs_paragraphs_by_sentences_batched(
+    docs: list[Document],
+    *,
+    model,
+    tokenizer,
+    src_lang: str,
+    tgt_lang: str,
+    device: str,
+    batch_size: int = 32,
+    max_input_tokens: int = 256,
+    max_new_tokens: int = 256,
+    num_beams: int = 4,
+) -> list[Document]:
+    tokenizer.src_lang = src_lang
+    forced_bos = tokenizer.convert_tokens_to_ids(tgt_lang)
+
+    # Flatten: (doc_idx, para_idx, sent_idx) -> sentence text
+    mapping = []
+    all_sents = []
+    per_doc_paras = []
+
+    for di, d in enumerate(docs):
+        text = unwrap_pdf_wrapped_lines(d.page_content)
+        paras = text.split("\n\n")
+        per_doc_paras.append([None] * len(paras))  # placeholder for reconstructed paras
+
+        for pi, para in enumerate(paras):
+            para = para.strip()
+            if not para:
+                per_doc_paras[di][pi] = ""  # keep empty paragraph
+                continue
+            sents = _SENT_SPLIT.split(para)
+            for si, s in enumerate(sents):
+                s = s.strip()
+                if not s:
+                    continue
+                mapping.append((di, pi, si))
+                all_sents.append(s)
+
+    # Translate all sentences in batches
+    translated_sents = []
+    for i in range(0, len(all_sents), batch_size):
+        batch = all_sents[i : i + batch_size]
+        enc = tokenizer(
+            batch,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_input_tokens,
+        )
+        if device in ("cuda", "mps"):
+            enc = {k: v.to(device) for k, v in enc.items()}
+
+        with torch.inference_mode():
+            gen = model.generate(
+                **enc,
+                forced_bos_token_id=forced_bos,
+                num_beams=num_beams,
+                max_new_tokens=max_new_tokens,
+                early_stopping=True,
+            )
+        translated_sents.extend(tokenizer.batch_decode(gen, skip_special_tokens=True))
+
+    # Rebuild per paragraph
+    # collect sentences per (doc, para) in order
+    from collections import defaultdict
+
+    bucket = defaultdict(list)
+    for (di, pi, _), tr in zip(mapping, translated_sents, strict=False):
+        bucket[(di, pi)].append(tr.strip())
+
+    for (di, pi), sent_list in bucket.items():
+        per_doc_paras[di][pi] = " ".join(s for s in sent_list if s)
+
+    # Build new docs
+    out = []
+    for di, d in enumerate(docs):
+        meta = dict(d.metadata)
+        meta["orig_page_content"] = d.page_content
+        meta["orig_lang"] = src_lang
+        meta["translated_to"] = tgt_lang
+        out.append(Document(page_content="\n\n".join(per_doc_paras[di]), metadata=meta))
+
+    return out
