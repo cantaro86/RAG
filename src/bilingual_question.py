@@ -108,6 +108,8 @@ def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
 class BilingualQuestion:
     FASTTEXT_CONFIDENCE_THRESHOLD = 0.2
 
+    MED_PREFIX = "[medical context] "
+
     LANG_CODES = {"it": "ita_Latn", "en": "eng_Latn"}
 
     ITALIAN_WORLDS = {
@@ -161,7 +163,11 @@ class BilingualQuestion:
         # Translate
         if self.lang == "it":
             self.it = self.text
-            self.en = _translate(self.text, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
+            hinted = self.MED_PREFIX + self.text.lstrip()
+            en = _translate(hinted, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
+            if en.lower().startswith(self.MED_PREFIX.lower()):
+                en = en[len(self.MED_PREFIX) :].lstrip()
+            self.en = en
         else:
             self.en = self.text
             self.it = _translate(self.text, src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
