@@ -19,6 +19,7 @@ from tqdm import tqdm
 
 from ._load_env import DEVICE, ONLINE, Config, cfg, console
 from .loggers import Logger
+from .translate import translate_docs_it_to_en
 
 logger = Logger.get_logger(__name__)
 
@@ -256,6 +257,14 @@ def build_faiss_index(cfg: Config) -> None:
     chunks = chunk_docs(docs, cfg.chunk_size, cfg.chunk_overlap)
     console.print(f"Loaded [bold]{len(docs)}[/bold] pages -> [bold]{len(chunks)}[/bold] chunks.")
     logger.info("Loaded %d pages -> %d chunks.", len(docs), len(chunks))
+
+    it_chunks = [c for c in chunks if c.metadata.get("language") == "it"]
+    logger.info("Found %d Italian chunks to translate.", len(it_chunks))
+
+    en_or_other_chunks = [c for c in chunks if c.metadata.get("language") != "it"]
+    if it_chunks:
+        en_chunks = translate_docs_it_to_en(it_chunks)
+        chunks = en_chunks + en_or_other_chunks
 
     embedder = build_embedder(cfg.embed_model)
     vs = FAISS.from_documents(chunks, embedder)

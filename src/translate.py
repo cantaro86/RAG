@@ -2,6 +2,14 @@ import re
 
 import torch
 from langchain_core.documents import Document
+from tqdm import tqdm
+
+from src.loggers import Logger
+
+from ._load_env import DEVICE, console
+from .bilingual_question import init_translators
+
+logger = Logger.get_logger(__name__)
 
 # The best batch size is hardware-dependent.
 
@@ -108,6 +116,54 @@ def translate_paragraphs_by_sentences(
         out_paras.append(" ".join(t.strip() for t in translated if t.strip()))
 
     return "\n\n".join(out_paras)
+
+
+def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
+    """
+    Translate Italian documents to English with progress bar and logging.
+    """
+    model, tokenizer = init_translators()
+
+    logger.info(f"Starting translation of {len(docs)} Italian chunks")
+    console.print(f"🗣️  Translating {len(docs)} Italian chunks to English...", style="bold")
+
+    out = []
+    for i, d in enumerate(tqdm(docs, desc="Translate chunks", unit="chunk")):
+        try:
+            en_text = translate_paragraphs_by_sentences(
+                d.page_content,
+                model=model,
+                tokenizer=tokenizer,
+                src_lang="ita_Latn",
+                tgt_lang="eng_Latn",
+                device=DEVICE,
+            )
+
+            # clone doc, keep provenance
+            new_meta = dict(d.metadata)
+            new_meta["orig_lang"] = "it"
+            new_meta["translated_to"] = "en"
+            new_meta["orig_page_content"] = d.page_content
+
+            out.append(Document(page_content=en_text, metadata=new_meta))
+
+            # Optional: log every Nth chunk for long jobs
+            if (i + 1) % 50 == 0:
+                logger.info(f"Translated {i + 1}/{len(docs)} chunks")
+                console.print(f"  ✓ {i + 1}/{len(docs)} chunks done", style="green")
+
+        except Exception as e:
+            logger.error(f"Translation failed for chunk {i} ({d.metadata.get('source', 'unknown')}): {e}")
+            console.print(f"  ❌ Chunk {i} failed: {e}", style="red")
+            # Keep original chunk with error metadata instead of crashing
+            new_meta = dict(d.metadata)
+            new_meta["translation_error"] = str(e)
+            out.append(Document(page_content=d.page_content, metadata=new_meta))
+
+    logger.info(f"Translation complete: {len(out)} chunks processed")
+    console.print(f"✅ Translation complete: {len(out)} chunks processed", style="bold green")
+
+    return out
 
 
 # Run the next function as in the commented example below.
