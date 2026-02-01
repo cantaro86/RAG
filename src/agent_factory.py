@@ -17,19 +17,12 @@ def build_rag_agent(cfg: Config):
     """
     vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
 
-    retriever_en = build_retriever(
+    retriever = build_retriever(
         vs,
         cfg.k,
         cfg.rerank_model if cfg.rerank else None,
         cfg.k_reranked,
-        score_key="rerank_score_en",
-    )
-    retriever_it = build_retriever(
-        vs,
-        cfg.k,
-        cfg.rerank_model if cfg.rerank else None,
-        cfg.k_reranked,
-        score_key="rerank_score_it",
+        score_key="rerank_score",
     )
 
     llm = build_llm_pipe(
@@ -51,8 +44,7 @@ def build_rag_agent(cfg: Config):
 
     ctx = RAGContext(
         topic_continuity_classifier=topic_continuity_classifier,
-        retriever_it=retriever_it,
-        retriever_en=retriever_en,
+        retriever=retriever,
         rag_chain=rag_chain,
         question_rewriter=question_rewriter,
     )

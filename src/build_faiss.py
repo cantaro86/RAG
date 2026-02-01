@@ -130,7 +130,7 @@ def load_pdfs(
             normal_text = doc[page_index].get_text("text").strip()
             if normal_text:
                 pdf_lang = _detect_lang_safe(normal_text)
-                print(f"{os.path.basename(p)}: page {page_index} sets lang={pdf_lang}")
+                logger.info(f"{os.path.basename(p)}: page {page_index} sets lang={pdf_lang}")
                 break
 
         # Apply SAME language to ALL pages of this PDF

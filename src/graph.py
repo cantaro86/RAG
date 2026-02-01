@@ -16,8 +16,7 @@ logger = Logger.get_logger(__name__)
 @dataclass
 class RAGContext:
     topic_continuity_classifier: object
-    retriever_it: object
-    retriever_en: object
+    retriever: object
     rag_chain: object
     question_rewriter: object
 
@@ -87,32 +86,29 @@ def topic_detector(state, topic_continuity_classifier):
     return {**state, "topic_status": topic}
 
 
-def retrieve_and_filter(state, retriever_it, retriever_en):
+def retrieve_and_filter(state, retriever):
     logger.debug("---RETRIEVE + FILTER---")
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
 
     # Retrieve from both languages if needed
     q = BilingualQuestion(question)
-    docs_it = retriever_it.invoke(q.it)
-    docs_en = retriever_en.invoke(q.en)
+    docs_en = retriever.invoke(q.en)
 
-    relevant_docs_it = [d for d in docs_it if d.metadata.get("rerank_score_it", 0) > cfg.threshold]
-    relevant_docs_en = [d for d in docs_en if d.metadata.get("rerank_score_en", 0) > cfg.threshold]
-    relevant_docs = relevant_docs_it + relevant_docs_en
+    relevant_docs = [d for d in docs_en if d.metadata.get("rerank_score", 0) > cfg.threshold]
     # score_prob = []
 
     # Debug info
     if logger.level <= logging.DEBUG:
         ### Uncomment if you use a model with scores that need to be converted to probabilities
-        # for d in all_docs:
-        #     _rerank_score = max(d.metadata["rerank_score_it"], d.metadata["rerank_score_en"])
+        # for d in relevant_docs:
+        #     _rerank_score = d.metadata["rerank_score"]
         #     score_prob.append(
         #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
         #     )
         sources_table = print_sources(relevant_docs)
 
-    logger.debug(f"Retrieved {len(docs_it) + len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
+    logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
     # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
     logger.debug(f"Top sources:\n{sources_table}")
 
@@ -242,9 +238,7 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("init_first_question", init_first_question)
 
-    workflow.add_node(
-        "retrieve_and_filter", lambda state: retrieve_and_filter(state, ctx.retriever_it, ctx.retriever_en)
-    )
+    workflow.add_node("retrieve_and_filter", lambda state: retrieve_and_filter(state, ctx.retriever))
 
     workflow.add_node("generate_with_docs", lambda state: generate_with_docs(state, ctx.rag_chain))
 
