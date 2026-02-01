@@ -123,11 +123,20 @@ def load_pdfs(
     for p in tqdm(paths, desc="Scanning PDFs (for OCR tasks)"):
         doc = fitz.open(p)
         pdf_pagecounts[p] = doc.page_count
+
+        # Find FIRST page with native text → set PDF language
+        pdf_lang = "unknown"
         for page_index in range(doc.page_count):
-            # cheap normal extraction just to pick OCR language
-            normal_text = doc[page_index].get_text("text") or ""
-            lang = _detect_lang_safe(normal_text)
-            tasks.append((p, page_index, lang, ocr_dpi, tessdata))
+            normal_text = doc[page_index].get_text("text").strip()
+            if normal_text:
+                pdf_lang = _detect_lang_safe(normal_text)
+                print(f"{os.path.basename(p)}: page {page_index} sets lang={pdf_lang}")
+                break
+
+        # Apply SAME language to ALL pages of this PDF
+        for page_index in range(doc.page_count):
+            tasks.append((p, page_index, pdf_lang, ocr_dpi, tessdata))
+
         doc.close()
 
     # Run OCR in parallel (PyMuPDF recommends multiprocessing; open document in worker) [web:160]
@@ -218,7 +227,7 @@ def chunk_docs(docs: list[Document], chunk_size: int, chunk_overlap: int) -> lis
             chunk.metadata["section"] = "Recommendation"
         else:
             chunk.metadata["section"] = "main"
-    chunks = [c for c in chunks if len(c.page_content) > 200]
+    chunks = [c for c in chunks if len(c.page_content) > 100]
     return chunks
 
 
