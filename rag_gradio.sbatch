@@ -9,6 +9,11 @@
 #SBATCH --output=rag.out
 #SBATCH --error=rag.err
 
+module load conda
+eval "$(conda shell.bash hook)"
+conda activate RAG
+
+
 set -euo pipefail
 
 PORT=7860

@@ -78,6 +78,7 @@ def topic_detector(state, topic_continuity_classifier):
     hist = format_history(state.get("history", []))
 
     topic = topic_continuity_classifier.invoke({"question": question, "history": hist})
+    topic = str(topic).strip().upper()
 
     logger.debug("--- TOPIC CONTINUITY CLASSIFIER---")
     logger.debug(f"Topic continuity evaluation: {topic}")
@@ -147,6 +148,7 @@ def generate_with_docs(state, rag_chain):
     hist = format_history(state.get("history", []))
 
     answer = rag_chain.invoke({"history": hist, "context": docs, "question": q})
+    logger.info(f"Generated answer (EN): {answer}")
 
     msgs = push_memory(state, q, answer)
 
@@ -176,6 +178,8 @@ def transform_query(state, question_rewriter):
 
 def clear_history(state: GraphState) -> dict:
     # If topic is NEW, wipe history before retrieving
+    logger.debug("---CLEAR HISTORY---")
+    logger.debug("Clearing conversation history due to new topic.")
     return {
         **state,
         "history": [],
@@ -212,17 +216,21 @@ def decide_relevance(state):
 
 def route_on_topic(state: GraphState) -> str:
     """
-    Must return a key present in the mapping passed to add_conditional_edges.
-    Expecting topic_status to be "SAME" or "NEW" (or e.g. SAME_TOPIC/NEW_TOPIC).
+    Robust topic router with full state logging.
     """
+
     t = str(state.get("topic_status", "")).strip().upper()
+    logger.debug(f"🚦 Extracted topic_status: '{t}' from state")
 
     if t in ("SAME", "SAME_TOPIC", "SAMETOPIC"):
+        logger.debug("🚦 → ROUTING 'same'")
         return "same"
     if t in ("NEW", "NEW_TOPIC", "NEWTOPIC"):
+        logger.debug("🚦 → ROUTING 'new'")
         return "new"
 
-    # safe default: don't clear history
+    # Log failure case
+    logger.warning(f"🚦 UNKNOWN topic_status '{t}' → defaulting to 'same'")
     return "same"
 
 

@@ -40,7 +40,7 @@ def interactive_loop(cfg: Config):
 
         try:
             quest = BilingualQuestion(question)
-            logger.debug(f"Language = {quest.lang}, class = {quest}")
+            logger.info(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
             logger.error(f"Error processing question: {e}")
             console.print(f"[red]Error: {e}[/red]")
@@ -64,6 +64,7 @@ def interactive_loop(cfg: Config):
                     # Translate answer back to Italian
                     answer_it = quest.translate_to_italian(last_output["generation"])
                     console.print(answer_it)
+                    logger.info(f"Final answer (IT): {answer_it}")
                 else:
                     console.print(last_output["generation"])
             else:

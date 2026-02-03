@@ -35,8 +35,9 @@ def launch_gradio(cfg: Config):
         if last_output and isinstance(last_output, dict) and "generation" in last_output:
             answer = last_output["generation"]
             if quest.lang == "it":
-                answer = quest.translate_to_italian(answer)
-            return answer, thread_id
+                answer_it = quest.translate_to_italian(answer)
+                logger.info(f"Final answer (IT): {answer_it}")
+            return answer_it, thread_id
 
         return "No generation returned from agent.", thread_id
 
@@ -49,17 +50,8 @@ def launch_gradio(cfg: Config):
         title="RAG Agent",
     )
 
-    if getattr(cfg, "gradio_share", False):
-        demo.queue().launch(
-            server_name=getattr(cfg, "gradio_host", "0.0.0.0"),
-            server_port=int(getattr(cfg, "gradio_port", 7860)),
-            share=True,
-            auth=("rag", "pippo"),
-            auth_message="Ask for the shared credentials to access this demo.",
-        )
-    else:
-        demo.queue().launch(
-            server_name=getattr(cfg, "gradio_host", "0.0.0.0"),
-            server_port=int(getattr(cfg, "gradio_port", 7860)),
-            share=False,
-        )
+    demo.queue().launch(
+        server_name=getattr(cfg, "gradio_host", "0.0.0.0"),
+        server_port=int(getattr(cfg, "gradio_port", 7860)),
+        share=getattr(cfg, "gradio_share", False),
+    )

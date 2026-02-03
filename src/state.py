@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from langchain_core.documents import Document
 
@@ -19,3 +19,5 @@ class GraphState(TypedDict):
     rewrite_count: int
     history: list[dict]
     first_question: bool
+    topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC"]]
+    has_docs: NotRequired[bool]
