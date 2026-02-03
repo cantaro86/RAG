@@ -8,7 +8,7 @@ from ._load_env import cfg
 from .bilingual_question import BilingualQuestion
 from .loggers import Logger
 from .state import GraphState
-from .utils import print_sources
+from .utils import print_sources, render_context
 
 logger = Logger.get_logger(__name__)
 
@@ -145,9 +145,10 @@ def generate_with_docs(state, rag_chain):
     logger.debug("---GENERATE WITH DOCS---")
     q = state["question"]
     docs = state.get("documents", [])
+    rendered_docs = render_context(docs)
     hist = format_history(state.get("history", []))
 
-    answer = rag_chain.invoke({"history": hist, "context": docs, "question": q})
+    answer = rag_chain.invoke({"history": hist, "context": rendered_docs, "question": q})
     logger.info(f"Generated answer (EN): {answer}")
 
     msgs = push_memory(state, q, answer)

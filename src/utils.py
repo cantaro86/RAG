@@ -9,6 +9,9 @@ from .loggers import Logger
 logger = Logger.get_logger(__name__)
 
 
+PATIENT_DOC = "3.6.25.pdf"
+
+
 def print_sources(docs: list[Document]) -> str:
     """
     Create a formatted table of source documents and return it as plain text.
@@ -33,3 +36,28 @@ def print_sources(docs: list[Document]) -> str:
     with plain_console.capture() as capture:
         plain_console.print(table)
     return capture.get()
+
+
+def doc_corpus_label(d: Document) -> str:
+    src = os.path.basename(d.metadata.get("source", ""))
+    return "Information for patients" if src == PATIENT_DOC else "Colonoscopy literature"
+
+
+def render_context(docs: list[Document]) -> str:
+    # Put patient chunks first so the model sees them earlier (it helps in practice).
+    docs_sorted = sorted(
+        docs,
+        key=lambda d: (
+            doc_corpus_label(d) != "Information for patients",  # False first
+            d.metadata.get("section") != "Recommendation",
+        ),  # False first
+    )
+    parts = []
+    for i, d in enumerate(docs_sorted, 1):
+        parts.append(
+            f"[{i}] Corpus: {doc_corpus_label(d)}\n"
+            f"Section: {d.metadata.get('section', 'main')}\n"
+            f"Source: {os.path.basename(d.metadata.get('source', 'unknown'))}, page {d.metadata.get('page', '?')}\n"
+            f"Excerpt: {d.page_content.strip()}\n"
+        )
+    return "\n".join(parts)
