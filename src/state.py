@@ -14,10 +14,10 @@ class GraphState(TypedDict):
     """
 
     question: str
-    generation: str
     documents: list[Document]
     rewrite_count: int
     history: list[dict]
     first_question: bool
+    generation: NotRequired[str]
     topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC"]]
     has_docs: NotRequired[bool]

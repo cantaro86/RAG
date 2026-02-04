@@ -148,6 +148,8 @@ class BilingualQuestion:
 
     def translate_to_italian(self, text: str) -> str:
         """Assume the input is in English"""
+        if not text:
+            return ""
         text_it = _translate(text.strip(), src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
         return text_it
 

@@ -5,7 +5,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from sentence_transformers import CrossEncoder
 
-from ._load_env import DEVICE, console
+from ._load_env import DEVICE
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -56,18 +56,32 @@ class ScoredCrossEncoderReranker(CrossEncoderReranker):
 # Retriever
 # ------------------------
 def build_retriever(
-    vs: FAISS, k: int, rerank_model: str | None, k_reranked: int, score_key: str = "rerank_score"
+    vs: FAISS,
+    k: int,
+    rerank_model: str | None,
+    k_reranked: int,
+    *,
+    score_key: str = "rerank_score",
+    search_type: str = "similarity",  # "similarity" | "mmr"
+    fetch_k: int | None = None,  # only used for MMR
+    lambda_mult: float = 0.3,  # 0=more diverse, 1=less diverse
 ) -> ContextualCompressionRetriever | VectorStoreRetriever:
-    base_retriever = vs.as_retriever(search_kwargs={"k": k})
+    if search_type == "mmr":
+        base_retriever = vs.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": k,
+                "fetch_k": fetch_k or max(4 * k, 80),
+                "lambda_mult": lambda_mult,
+            },
+        )
+    else:
+        base_retriever = vs.as_retriever(search_kwargs={"k": k})
+
     if rerank_model:
-        console.print(f"Using cross-encoder reranker ({DEVICE}): [bold]{rerank_model}[/bold]")
-        logger.info(f"Using cross-encoder reranker ({DEVICE}): {rerank_model}")
         cross_encoder = MPSSentenceCrossEncoder(rerank_model)
         compressor = ScoredCrossEncoderReranker(model=cross_encoder, top_n=k_reranked, score_key=score_key)
-        retriever = ContextualCompressionRetriever(
-            base_compressor=compressor,
-            base_retriever=base_retriever,
-        )
+        retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=base_retriever)
         return retriever
-    else:
-        return base_retriever
+
+    return retriever if rerank_model else base_retriever

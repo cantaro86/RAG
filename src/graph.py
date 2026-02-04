@@ -60,13 +60,16 @@ def format_history(history: list[dict]):
 
 
 def init_first_question(state: GraphState) -> dict:
-    """Check if this is the first question in the conversation"""
-
     hist = state.get("history", [])
     first = len(hist) == 0
-    logger.debug(f"NODE: init_first_question {first}")
-
-    return {**state, "first_question": first}
+    return {
+        **state,
+        "first_question": first,
+        "rewrite_count": 0,
+        "has_docs": False,
+        "documents": [],
+        "generation": None,
+    }
 
 
 def topic_detector(state, topic_continuity_classifier):
@@ -118,7 +121,7 @@ def retrieve_and_filter(state, retriever):
         return {
             **state,
             "documents": relevant_docs,
-            "rewrite_count": rewrite_count,
+            "rewrite_count": 0,
             "has_docs": True,
         }
     else:
@@ -190,6 +193,12 @@ def clear_history(state: GraphState) -> dict:
     }
 
 
+def generate_no_docs(state: GraphState) -> dict:
+    logger.debug("---GENERATE NO DOCS---")
+    msg = "I couldn't find relevant information. Please rephrase your question or add details."
+    return {**state, "generation": msg, "has_docs": False}
+
+
 # ------------------------
 # Agent Edges
 # ------------------------
@@ -257,6 +266,8 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("clear_history", clear_history)
 
+    workflow.add_node("generate_no_docs", generate_no_docs)
+
     workflow.add_edge(START, "init_first_question")
 
     workflow.add_edge("clear_history", "retrieve_and_filter")
@@ -282,8 +293,15 @@ def build_agent_graph(ctx: RAGContext):
     workflow.add_conditional_edges(
         "retrieve_and_filter",
         decide_relevance,
-        {"transform_query": "transform_query", "end": END, "generate_with_docs": "generate_with_docs"},
+        {
+            "transform_query": "transform_query",
+            "generate_with_docs": "generate_with_docs",
+            "end": "generate_no_docs",
+        },
     )
+
+    workflow.add_edge("generate_no_docs", END)
+
     workflow.add_edge("transform_query", "retrieve_and_filter")
 
     workflow.add_edge("generate_with_docs", END)
