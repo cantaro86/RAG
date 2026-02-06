@@ -35,7 +35,7 @@ prompt_rag = PromptTemplate(
 
 Hard rules:
 - Use ONLY the information in Sources and Conversation history. Do not use outside knowledge.
-- If Sources do not contain the answer say that
+- If Sources do not contain the answer, output EXACTLY:
   the exam documentation and the colonoscopy literature do not contain the information.
 
 Conversation history:
@@ -49,6 +49,36 @@ Current question:
 
 Answer:""",
     input_variables=["history", "context", "question"],
+)
+
+
+# Answer cleaner
+prompt_clean = PromptTemplate(
+    template="""You are editing a medical answer. Edit carefully.
+
+Sources (use these spellings):
+{context}
+
+Original answer to edit:
+{answer}
+
+Rules:
+1. Remove ALL these phrases (case insensitive):
+   "according to the provided sources", "based on the given sources",
+   "according to the sources", "based on the sources", "provided sources",
+   "given sources", "the sources", "the context", "retrieved context",
+   "conversation history”, “based on the documents”, or similar meta-talk.
+
+2. Replace them with the content of Corpus labels of the Sources used, choosing among:
+   "Information for patients"
+   "Colonoscopy literature" or both.
+
+3. Copy medical term spellings exactly from Sources (e.g., if Sources says "diverticular", use "diverticular").
+
+4. Do NOT change meaning or add new information.
+
+Output ONLY the cleaned answer (no explanations, no quotes).""",
+    input_variables=["context", "answer"],
 )
 
 

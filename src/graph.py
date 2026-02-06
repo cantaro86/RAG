@@ -18,6 +18,7 @@ class RAGContext:
     topic_continuity_classifier: object
     retriever: object
     rag_chain: object
+    cleaner_chain: object
     question_rewriter: object
 
     def __post_init__(self):
@@ -152,11 +153,27 @@ def generate_with_docs(state, rag_chain):
     hist = format_history(state.get("history", []))
 
     answer = rag_chain.invoke({"history": hist, "context": rendered_docs, "question": q})
-    logger.info(f"Generated answer (EN): {answer}")
+    logger.info(f"Raw Generated answer (EN): {answer}")
 
     msgs = push_memory(state, q, answer)
 
     return {**state, "generation": answer, "rewrite_count": 0, "history": msgs}
+
+
+def clean_answer(state, cleaner_chain):
+    logger.debug("--- CLEAN ANSWER ---")
+    docs = state.get("documents", [])
+    ctx_str = render_context(docs)  # your existing renderer
+    raw_answer = state["generation"]
+
+    cleaned = cleaner_chain.invoke({"context": ctx_str, "answer": raw_answer})
+
+    logger.info(f"Cleaned Generated answer (EN): {cleaned}")
+
+    return {
+        **state,
+        "generation": cleaned.strip(),
+    }
 
 
 def transform_query(state, question_rewriter):
@@ -260,6 +277,8 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("generate_with_docs", lambda state: generate_with_docs(state, ctx.rag_chain))
 
+    workflow.add_node("clean_answer", lambda state: clean_answer(state, ctx.cleaner_chain))
+
     workflow.add_node("transform_query", lambda state: transform_query(state, ctx.question_rewriter))
 
     workflow.add_node("topic_detector", lambda state: topic_detector(state, ctx.topic_continuity_classifier))
@@ -271,6 +290,8 @@ def build_agent_graph(ctx: RAGContext):
     workflow.add_edge(START, "init_first_question")
 
     workflow.add_edge("clear_history", "retrieve_and_filter")
+
+    workflow.add_edge("generate_with_docs", "clean_answer")
 
     workflow.add_conditional_edges(
         "init_first_question",
@@ -304,7 +325,7 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_edge("transform_query", "retrieve_and_filter")
 
-    workflow.add_edge("generate_with_docs", END)
+    workflow.add_edge("clean_answer", END)
 
     agent = workflow.compile(checkpointer=checkpointer)
     return agent
