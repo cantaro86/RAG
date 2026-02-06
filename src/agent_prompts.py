@@ -54,29 +54,31 @@ Answer:""",
 
 # Answer cleaner
 prompt_clean = PromptTemplate(
-    template="""Edit this Answer. Make ONLY minimal changes.
+    template="""Edit this Answer by replacing meta-references with Corpus names.
 
-Sources:
+Sources (with Corpus labels):
 {context}
 
-Answer:
+Answer to edit:
 {answer}
 
 Rules:
-1. Remove ALL these phrases:
-   "according to the sources", "based on the sources", "provided sources",
-   "given sources", "the sources", "Source [N]", "the context", "retrieved context",
-   "conversation history”, “based on the documents”, or similar meta-talk.
+1. Find ALL phrases that refer to "where the information came from" in a meta way, such as:
+   - "the sources", "provided sources", "referenced studies", "cited works"
+   - "the documents", "the studies", "the provided context"
+   - "based on X", "according to X", "mentioned in X" (where X = any meta-reference)
 
-2. Replace them with the content of Corpus labels of the Sources used, choosing among:
-   "Information for patients"
-   "Colonoscopy literature" or both.
+2. Replace those phrases with the actual Corpus name from Sources:
+   - Use "Information for patients" or "Colonoscopy literature". Use both if content came from both corpora.
+   - To decide which Corpus: check the Corpus labels in Sources above
 
-3. Copy medical term spellings exactly from Sources (e.g., if Sources says "diverticular", use "diverticular").
+3. Fix medical term spelling by copying exactly from Sources (e.g. if Sources says "diverticular", use "diverticular").
 
-4. Do NOT add, rewrite, expand, or summarize.
+4. Keep sentence structure and all other words identical. Only replace meta-references with Corpus names.
 
-Output ONLY the cleaned answer (no explanations, no quotes).""",
+5. Do NOT expand, summarize, or add new information.
+
+Output the edited answer only:""",
     input_variables=["context", "answer"],
 )
 
