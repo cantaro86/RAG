@@ -3,7 +3,7 @@
 # ------------------------
 
 
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 
 prompt_topic = PromptTemplate(
     template="""You are a topic continuity classifier.
@@ -53,33 +53,33 @@ Answer:""",
 
 
 # Answer cleaner
-prompt_clean = PromptTemplate(
-    template="""Edit this Answer by replacing meta-references with Corpus names.
+prompt_clean_chat = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You are a silent text editor.\n"
+            "Output ONLY the edited answer text (no preambles, no explanations, no lists, no headings).\n"
+            "Do not paraphrase or rephrase; make the smallest possible edits.\n"
+            "Never output the phrase 'conversation history'.\n"
+            "Do not add any new lines. Keep the same number of lines as the original.",
+        ),
+        (
+            "user",
+            """Answer:
+    {answer}
 
-Sources (with Corpus labels):
-{context}
+    Sources (spelling only):
+    {context}
 
-Answer to edit:
-{answer}
+    Do ONLY:
+    1) Delete meta-reference phrases anywhere (e.g., 'Based on...', 'According to...', 'As stated in...',
+    references to sources/documents/context/research, and 'Source [N]').
+    2) Fix medical spelling ONLY when the correct spelling appears verbatim in Sources;
+    otherwise do not change the term.
 
-Rules:
-1. Find ALL phrases that refer to "where the information came from" in a meta way, such as:
-   - "the sources", "provided sources", "referenced studies", "cited works"
-   - "the documents", "the studies", "the provided context"
-   - "based on X", "according to X", "mentioned in X" (where X = any meta-reference)
-
-2. Replace those phrases with the actual Corpus name from Sources:
-   - Use "Information for patients" or "Colonoscopy literature". Use both if content came from both corpora.
-   - To decide which Corpus: check the Corpus labels in Sources above
-
-3. Fix medical term spelling by copying exactly from Sources (e.g. if Sources says "diverticular", use "diverticular").
-
-4. Keep sentence structure and all other words identical. Only replace meta-references with Corpus names.
-
-5. Do NOT expand, summarize, or add new information.
-
-Output the edited answer only:""",
-    input_variables=["context", "answer"],
+    Return ONLY the edited answer text.""",
+        ),
+    ]
 )
 
 
