@@ -54,19 +54,18 @@ Answer:""",
 
 # Answer cleaner
 prompt_clean = PromptTemplate(
-    template="""You are editing a medical answer. Edit carefully.
+    template="""Edit this Answer. Make ONLY minimal changes.
 
-Sources (use these spellings):
+Sources:
 {context}
 
-Original answer to edit:
+Answer:
 {answer}
 
 Rules:
-1. Remove ALL these phrases (case insensitive):
-   "according to the provided sources", "based on the given sources",
+1. Remove ALL these phrases:
    "according to the sources", "based on the sources", "provided sources",
-   "given sources", "the sources", "the context", "retrieved context",
+   "given sources", "the sources", "Source [N]", "the context", "retrieved context",
    "conversation history”, “based on the documents”, or similar meta-talk.
 
 2. Replace them with the content of Corpus labels of the Sources used, choosing among:
@@ -75,7 +74,7 @@ Rules:
 
 3. Copy medical term spellings exactly from Sources (e.g., if Sources says "diverticular", use "diverticular").
 
-4. Do NOT change meaning or add new information.
+4. Do NOT add, rewrite, expand, or summarize.
 
 Output ONLY the cleaned answer (no explanations, no quotes).""",
     input_variables=["context", "answer"],
