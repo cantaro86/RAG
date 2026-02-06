@@ -7,9 +7,10 @@ from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: s
 
 
 from src.agent_factory import build_rag_agent
-from src.bilingual_question import BilingualQuestion, init_translators
+from src.bilingual_question import BilingualQuestion
 from src.build_faiss import build_faiss_index
 from src.loggers import Logger
+from src.translate import init_translators
 from src.ui_gradio import launch_gradio
 
 logger = Logger.get_logger(__name__)

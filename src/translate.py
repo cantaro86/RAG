@@ -1,4 +1,5 @@
 import re
+from functools import lru_cache
 
 import torch
 from langchain_core.documents import Document
@@ -6,10 +7,55 @@ from tqdm import tqdm
 
 from src.loggers import Logger
 
-from ._load_env import DEVICE, console
-from .bilingual_question import init_translators
+from ._load_env import DEVICE, cfg, console
+from .llm_build import load_translator
 
 logger = Logger.get_logger(__name__)
+
+
+@lru_cache(maxsize=1)
+def _load_translators():
+    """
+    Load single NLLB model for bidirectional translation.
+    Returns (model, tokenizer) tuple - loaded once on first use.
+    """
+    return load_translator(cfg.translate_model)
+
+
+def init_translators():
+    """Warm up translators at startup. Returns (it_en, en_it)."""
+    return _load_translators()
+
+
+def translate_short_text(text: str, src_lang: str, tgt_lang: str) -> str:
+    """
+    Translate text using NLLB model.
+
+    Args:
+        text: Text to translate
+        src_lang: Source language code ('ita_Latn' or 'eng_Latn')
+        tgt_lang: Target language code ('ita_Latn' or 'eng_Latn')
+    """
+    model, tokenizer = _load_translators()
+
+    # Set source language
+    tokenizer.src_lang = src_lang
+
+    # Tokenize
+    inputs = tokenizer(text, return_tensors="pt", padding=True)
+
+    # Move to device
+    if DEVICE in ["cuda", "mps"]:
+        inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+
+    # Generate translation
+    translated_tokens = model.generate(
+        **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang), max_new_tokens=128, num_beams=5
+    )
+
+    # Decode
+    return tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+
 
 # The best batch size is hardware-dependent.
 
@@ -72,7 +118,7 @@ def translate_paragraphs_by_sentences(
     batch_size: int = 32,
     max_input_tokens: int = 256,
     max_new_tokens: int = 256,
-    num_beams: int = 4,
+    num_beams: int = 5,
 ) -> str:
     tokenizer.src_lang = src_lang
     forced_bos = tokenizer.convert_tokens_to_ids(tgt_lang)
@@ -122,7 +168,7 @@ def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
     """
     Translate Italian documents to English with progress bar and logging.
     """
-    model, tokenizer = init_translators()
+    model, tokenizer = _load_translators()
 
     logger.info(f"Starting translation of {len(docs)} Italian chunks")
     console.print(f"🗣️  Translating {len(docs)} Italian chunks to English...", style="bold")
@@ -166,100 +212,22 @@ def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
     return out
 
 
-# Run the next function as in the commented example below.
+def translate_long_text(text: str, src_lang: str, tgt_lang: str) -> str:
+    """
+    Translate long text (e.g., final RAG answer) using sentence-level batching.
+    Avoids truncation by splitting into manageable chunks.
+    """
+    model, tokenizer = _load_translators()
 
-# docs_it_to_en2 =  translate_docs_paragraphs_by_sentences_batched(
-#     docs_it,
-#     model=model,
-#     tokenizer=tokenizer,
-#     batch_size=32,
-#     src_lang="ita_Latn",
-#     tgt_lang="eng_Latn",
-#     device="cuda",
-#     num_beams=1)
-
-
-def translate_docs_paragraphs_by_sentences_batched(
-    docs: list[Document],
-    *,
-    model,
-    tokenizer,
-    src_lang: str,
-    tgt_lang: str,
-    device: str,
-    batch_size: int = 32,
-    max_input_tokens: int = 256,
-    max_new_tokens: int = 256,
-    num_beams: int = 4,
-) -> list[Document]:
-    tokenizer.src_lang = src_lang
-    forced_bos = tokenizer.convert_tokens_to_ids(tgt_lang)
-
-    # Flatten: (doc_idx, para_idx, sent_idx) -> sentence text
-    mapping = []
-    all_sents = []
-    per_doc_paras = []
-
-    for di, d in enumerate(docs):
-        text = unwrap_pdf_wrapped_lines(d.page_content)
-        paras = text.split("\n\n")
-        per_doc_paras.append([None] * len(paras))  # placeholder for reconstructed paras
-
-        for pi, para in enumerate(paras):
-            para = para.strip()
-            if not para:
-                per_doc_paras[di][pi] = ""  # keep empty paragraph
-                continue
-            sents = _SENT_SPLIT.split(para)
-            for si, s in enumerate(sents):
-                s = s.strip()
-                if not s:
-                    continue
-                mapping.append((di, pi, si))
-                all_sents.append(s)
-
-    # Translate all sentences in batches
-    translated_sents = []
-    for i in range(0, len(all_sents), batch_size):
-        batch = all_sents[i : i + batch_size]
-        enc = tokenizer(
-            batch,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=max_input_tokens,
-        )
-        if device in ("cuda", "mps"):
-            enc = {k: v.to(device) for k, v in enc.items()}
-
-        with torch.inference_mode():
-            gen = model.generate(
-                **enc,
-                forced_bos_token_id=forced_bos,
-                num_beams=num_beams,
-                max_new_tokens=max_new_tokens,
-                early_stopping=True,
-            )
-        translated_sents.extend(tokenizer.batch_decode(gen, skip_special_tokens=True))
-
-    # Rebuild per paragraph
-    # collect sentences per (doc, para) in order
-    from collections import defaultdict
-
-    bucket = defaultdict(list)
-    for (di, pi, _), tr in zip(mapping, translated_sents, strict=False):
-        bucket[(di, pi)].append(tr.strip())
-
-    for (di, pi), sent_list in bucket.items():
-        per_doc_paras[di][pi] = " ".join(s for s in sent_list if s)
-
-    # Build new docs
-    out = []
-    for di, d in enumerate(docs):
-        meta = dict(d.metadata)
-        meta["orig_page_content"] = d.page_content
-        meta["orig_lang"] = src_lang
-        meta["translated_to"] = tgt_lang
-        out.append(Document(page_content="\n\n".join(per_doc_paras[di]), metadata=meta))
-
-    return out
+    return translate_paragraphs_by_sentences(
+        text,
+        model=model,
+        tokenizer=tokenizer,
+        src_lang=src_lang,
+        tgt_lang=tgt_lang,
+        device=DEVICE,
+        batch_size=16,  # smaller batch for long sentences
+        max_input_tokens=256,  # per-sentence token limit
+        max_new_tokens=256,  # allows longer outputs per sentence
+        num_beams=5,  # balance quality/speed
+    )

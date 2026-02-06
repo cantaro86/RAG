@@ -1,13 +1,12 @@
 import os
 import string
 import urllib
-from functools import lru_cache
 
 import fasttext
 from langdetect import detect_langs
 
-from ._load_env import DEVICE, cfg
-from .llm_build import load_translator
+from src.translate import translate_long_text, translate_short_text
+
 from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -32,51 +31,8 @@ except Exception as e:
 
 logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
 
+
 # -------------------------
-
-
-@lru_cache(maxsize=1)
-def _load_translators():
-    """
-    Load single NLLB model for bidirectional translation.
-    Returns (model, tokenizer) tuple - loaded once on first use.
-    """
-    return load_translator(cfg.translate_model)
-
-
-def init_translators():
-    """Warm up translators at startup. Returns (it_en, en_it)."""
-    return _load_translators()
-
-
-def _translate(text: str, src_lang: str, tgt_lang: str) -> str:
-    """
-    Translate text using NLLB model.
-
-    Args:
-        text: Text to translate
-        src_lang: Source language code ('ita_Latn' or 'eng_Latn')
-        tgt_lang: Target language code ('ita_Latn' or 'eng_Latn')
-    """
-    model, tokenizer = _load_translators()
-
-    # Set source language
-    tokenizer.src_lang = src_lang
-
-    # Tokenize
-    inputs = tokenizer(text, return_tensors="pt", padding=True)
-
-    # Move to device
-    if DEVICE in ["cuda", "mps"]:
-        inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
-
-    # Generate translation
-    translated_tokens = model.generate(
-        **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang), max_length=512, num_beams=5
-    )
-
-    # Decode
-    return tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 
 
 class BilingualQuestion:
@@ -138,19 +94,19 @@ class BilingualQuestion:
         if self.lang == "it":
             self.it = self.text
             hinted = self.MED_PREFIX + self.text.lstrip()
-            en = _translate(hinted, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
+            en = translate_short_text(hinted, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
             if en.lower().startswith(self.MED_PREFIX.lower()):
                 en = en[len(self.MED_PREFIX) :].lstrip()
             self.en = en
         else:
             self.en = self.text
-            self.it = _translate(self.text, src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
+            self.it = translate_short_text(self.text, src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
 
     def translate_to_italian(self, text: str) -> str:
         """Assume the input is in English"""
         if not text:
             return ""
-        text_it = _translate(text.strip(), src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
+        text_it = translate_long_text(text.strip(), src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
         return text_it
 
     # -------------------------
