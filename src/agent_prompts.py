@@ -57,27 +57,26 @@ prompt_clean_chat = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "You are a silent text editor.\n"
-            "Output ONLY the edited answer text (no preambles, no explanations, no lists, no headings).\n"
-            "Do not paraphrase or rephrase; make the smallest possible edits.\n"
-            "Never output the phrase 'conversation history'.\n"
-            "Do not add any new lines. Keep the same number of lines as the original.",
+            """You are a precise medical editor.
+        Task: Copy the text below, removing ONLY meta-commentary and citations.
+
+        Rules:
+        1. REMOVE phrases referring to the "context", "documents", "sources", "conversation history", or "provided text"
+        (e.g., "Based on...", "According to the provided...", "As mentioned in...", "As stated in...").
+        2. REMOVE citation markers if present (e.g., "[1]", "[Source 1]", "(Doc 2)").
+        3. If a whole sentence discusses the "conversation history", "provided context",
+        or "sources" (e.g., "The conversation history mentions..."), DELETE the entire sentence.
+        4. If you remove a prefix, capitalize the new start of the sentence.
+        5. Keep ALL other sentences exactly as they are.
+        6. DO NOT rephrase or summarize.
+        7. Output ONLY the cleaned text. (no preambles, no explanations, no lists).
+        """,
         ),
         (
             "user",
-            """Answer:
-    {answer}
-
-    Sources (spelling only):
-    {context}
-
-    Do ONLY:
-    1) Delete meta-reference phrases anywhere (e.g., 'Based on...', 'According to...', 'As stated in...',
-    references to sources/documents/context/research, and 'Source [N]').
-    2) Fix medical spelling ONLY when the correct spelling appears verbatim in Sources;
-    otherwise do not change the term.
-
-    Return ONLY the edited answer text.""",
+            """Text to edit:
+            {answer}
+        """,
         ),
     ]
 )

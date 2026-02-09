@@ -108,22 +108,31 @@ def build_llm_pipe(
     # === Build pipeline based on backend ===
     if use_mlx:
         # MLX-based generation wrapper
+        # UPDATE: Accept **kwargs to allow runtime overrides
         def mlx_generate(prompt, **kwargs):
-            # Create sampler with temperature and top_p
-            sampler = make_sampler(temp=temperature, top_p=top_p)
+            # Extract parameters from kwargs, falling back to defaults if not present
+            # Note: kwargs here comes from gen_kwargs in invoke(), which already has defaults merged
 
-            # Create logits processors for repetition penalty
-            logits_processors = make_logits_processors(repetition_penalty=repetition_penalty)
+            curr_temp = kwargs.get("temperature", temperature)
+            curr_top_p = kwargs.get("top_p", top_p)
+            curr_rep_pen = kwargs.get("repetition_penalty", repetition_penalty)
+            curr_max_tokens = kwargs.get("max_new_tokens", max_new_tokens)
+
+            # Create sampler with CURRENT settings
+            sampler = make_sampler(temp=curr_temp, top_p=curr_top_p)
+
+            # Create logits processors with CURRENT settings
+            logits_processors = make_logits_processors(repetition_penalty=curr_rep_pen)
 
             response = generate(
                 model,
-                tok,  # Using tok as you assigned tokenizer to tok
+                tok,
                 prompt=prompt,
-                max_tokens=max_new_tokens,
+                max_tokens=curr_max_tokens,
                 sampler=sampler,
                 logits_processors=logits_processors,
             )
-            return [{"generated_text": response}]
+            return response  # Ensure this returns string or expected format
 
         gen = mlx_generate
 
@@ -143,9 +152,21 @@ def build_llm_pipe(
             pad_token_id=tok.eos_token_id,
         )
 
-    def invoke(messages):
+    def invoke(messages, **runtime_kwargs):
         # Convert all messages to a consistent format
         formatted_messages = []
+
+        gen_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "repetition_penalty": repetition_penalty,  # Default from config
+            "no_repeat_ngram_size": no_repeat_ngram_size,
+        }
+
+        # Override defaults with any arguments passed via .bind()
+        gen_kwargs.update(runtime_kwargs)
 
         for msg in messages:
             if hasattr(msg, "type"):  # LangChain message object
@@ -171,17 +192,32 @@ def build_llm_pipe(
         # DEBUG: Print what we're sending to the model
         logger.debug(f"🔍 PROMPT FROM apply_chat_template:\n{prompt}\n")
 
-        # Run generation
-        result = gen(prompt, return_full_text=False)[0]["generated_text"]
+        # 2. Pass updated parameters to the generator
+        if use_mlx:
+            # You would need to update mlx_generate to accept kwargs too
+            # keeping it simple here for standard path:
+            result_text = gen(prompt, **gen_kwargs)
+        else:
+            # Standard HF Pipeline accepts overrides directly
+            result = gen(prompt, return_full_text=False, **gen_kwargs)
+            result_text = result[0]["generated_text"]
 
-        return {"role": "assistant", "content": result.strip()}
+        return {"role": "assistant", "content": result_text.strip()}
 
     class SimpleLLM:
         def __init__(self, invoke_func):
-            self.invoke = invoke_func
+            self.invoke_func = invoke_func
+            self.bound_kwargs = {}  # Store bound parameters
 
         def bind(self, **kwargs):
-            return self
+            # Create a new instance with the bound parameters
+            new_llm = SimpleLLM(self.invoke_func)
+            new_llm.bound_kwargs = {**self.bound_kwargs, **kwargs}
+            return new_llm
+
+        def invoke(self, input_data):
+            # Call the internal function with bound args
+            return self.invoke_func(input_data, **self.bound_kwargs)
 
     return SimpleLLM(invoke)
 

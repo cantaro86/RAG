@@ -36,8 +36,10 @@ def build_rag_agent(cfg: Config):
         quantization=cfg.quantization,
     )
 
+    llm_cleaner = llm.bind(repetition_penalty=1.0, temperature=1e-5, no_repeat_ngram_size=0, do_sample=False)
+
     llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
-    llm_messages = RunnableLambda(lambda messages: llm.invoke(messages)["content"])
+    llm_messages = RunnableLambda(lambda messages: llm_cleaner.invoke(messages)["content"])
 
     topic_continuity_classifier = prompt_topic | llm_runnable | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()

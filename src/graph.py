@@ -162,19 +162,22 @@ def generate_with_docs(state, rag_chain):
 
 def clean_answer(state, cleaner_chain):
     logger.debug("--- CLEAN ANSWER ---")
-    # docs = state.get("documents", [])
-    # ctx_str = render_context(docs)  # your existing renderer
-    # raw_answer = state["generation"]
 
-    # cleaned = cleaner_chain.invoke({"context": ctx_str, "answer": raw_answer})
+    if cfg.clean_answer is True:
+        docs = state.get("documents", [])
+        ctx_str = render_context(docs)  # your existing renderer
+        raw_answer = state["generation"]
 
-    # logger.info(f"Cleaned Generated answer (EN): {cleaned}")
+        cleaned = cleaner_chain.invoke({"context": ctx_str, "answer": raw_answer})
 
-    # return {
-    #     **state,
-    #     "generation": cleaned.strip(),
-    # }
-    return state  # No cleaning for now
+        logger.info(f"Cleaned Generated answer (EN): {cleaned}")
+
+        return {
+            **state,
+            "generation": cleaned.strip(),
+        }
+
+    return state
 
 
 def transform_query(state, question_rewriter):
