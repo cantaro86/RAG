@@ -4,7 +4,7 @@ from langchain_core.documents import Document
 from rich.console import Console
 from rich.table import Table as RichTable
 
-from .loggers import Logger
+from src.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

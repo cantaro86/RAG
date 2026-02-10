@@ -17,9 +17,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 from tqdm import tqdm
 
-from ._load_env import DEVICE, ONLINE, Config, cfg, console
-from .loggers import Logger
-from .translate import translate_docs_it_to_en
+from src._load_env import DEVICE, ONLINE, Config, cfg, console
+from src.loggers import Logger
+from src.translate import translate_docs_it_to_en
 
 logger = Logger.get_logger(__name__)
 
@@ -272,7 +272,7 @@ def build_faiss_index(cfg: Config) -> None:
 
     en_or_other_chunks = [c for c in chunks if c.metadata.get("language") != "it"]
     if it_chunks:
-        en_chunks = translate_docs_it_to_en(it_chunks)
+        en_chunks = translate_docs_it_to_en(it_chunks, src_lang="ita_Latn", tgt_lang="eng_Latn")
         chunks = en_chunks + en_or_other_chunks
 
     embedder = build_embedder(cfg.embed_model)

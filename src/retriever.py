@@ -5,8 +5,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from sentence_transformers import CrossEncoder
 
-from ._load_env import DEVICE
-from .loggers import Logger
+from src._load_env import DEVICE
+from src.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

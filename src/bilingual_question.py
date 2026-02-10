@@ -5,9 +5,8 @@ import urllib
 import fasttext
 from langdetect import detect_langs
 
+from src.loggers import Logger
 from src.translate import translate_long_text, translate_short_text
-
-from .loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

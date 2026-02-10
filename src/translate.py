@@ -5,10 +5,9 @@ import torch
 from langchain_core.documents import Document
 from tqdm import tqdm
 
+from src._load_env import DEVICE, cfg, console
+from src.llm_build import load_translator
 from src.loggers import Logger
-
-from ._load_env import DEVICE, cfg, console
-from .llm_build import load_translator
 
 logger = Logger.get_logger(__name__)
 
@@ -121,6 +120,7 @@ def translate_paragraphs_by_sentences(
     num_beams: int = 5,
 ) -> str:
     tokenizer.src_lang = src_lang
+
     forced_bos = tokenizer.convert_tokens_to_ids(tgt_lang)
 
     text = unwrap_pdf_wrapped_lines(text)
@@ -137,7 +137,10 @@ def translate_paragraphs_by_sentences(
 
         translated = []
         for i in range(0, len(sents), batch_size):
-            batch = sents[i : i + batch_size]
+            batch = [s for s in sents[i : i + batch_size] if s.strip()]
+            if not batch:
+                continue
+
             enc = tokenizer(
                 batch,
                 return_tensors="pt",  # pythorch tensor instead of list
@@ -164,7 +167,7 @@ def translate_paragraphs_by_sentences(
     return "\n\n".join(out_paras)
 
 
-def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
+def translate_docs_it_to_en(docs: list[Document], src_lang: str, tgt_lang: str) -> list[Document]:
     """
     Translate Italian documents to English with progress bar and logging.
     """
@@ -180,8 +183,8 @@ def translate_docs_it_to_en(docs: list[Document]) -> list[Document]:
                 d.page_content,
                 model=model,
                 tokenizer=tokenizer,
-                src_lang="ita_Latn",
-                tgt_lang="eng_Latn",
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
                 device=DEVICE,
             )
 
