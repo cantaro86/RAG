@@ -1,97 +1,117 @@
 import re
+from concurrent.futures import ProcessPoolExecutor
 from functools import lru_cache
 
-import torch
+import argostranslate.package
+import argostranslate.translate
+from argostranslate.translate import ITranslation
 from langchain_core.documents import Document
 from tqdm import tqdm
 
-from src._load_env import DEVICE, cfg, console
-from src.llm_build import load_translator
+from src._load_env import console
 from src.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 
 
-@lru_cache(maxsize=1)
-def _load_translators():
+# ============================================================================
+# Model Loading & Initialization
+# ============================================================================
+
+
+def setup_argos_translation():
     """
-    Load single NLLB model for bidirectional translation.
-    Returns (model, tokenizer) tuple - loaded once on first use.
+    Download and install Argos translation packages if not already installed.
     """
-    return load_translator(cfg.translate_model)
+    logger.info("Checking Argos Translate packages...")
+
+    # Check what's already installed
+    installed_languages = argostranslate.translate.get_installed_languages()
+    installed_codes = {lang.code for lang in installed_languages}
+
+    # Check if we have both it and en
+    if "it" in installed_codes and "en" in installed_codes:
+        # Check if translations exist
+        try:
+            it_lang = next(filter(lambda x: x.code == "it", installed_languages))
+            en_lang = next(filter(lambda x: x.code == "en", installed_languages))
+
+            if it_lang.get_translation(en_lang) and en_lang.get_translation(it_lang):
+                logger.info("✅ Translation packages already installed")
+                return
+        except Exception as e:  # ✅ Only catch exceptions, not system exits
+            logger.warning(f"Translation check failed: {e}")
+            pass
+
+    logger.info("Installing Argos Translate packages...")
+    argostranslate.package.update_package_index()
+    available_packages = argostranslate.package.get_available_packages()
+
+    # Install Italian <-> English packages
+    for from_code, to_code in [("it", "en"), ("en", "it")]:
+        package = next(filter(lambda x: x.from_code == from_code and x.to_code == to_code, available_packages), None)
+        if package:
+            logger.info(f"Installing {from_code} -> {to_code} translation package")
+            argostranslate.package.install_from_path(package.download())
+        else:
+            logger.warning(f"Package {from_code} -> {to_code} not found")
+
+    logger.info("✅ Argos Translate setup complete")
+
+
+@lru_cache(maxsize=2)
+def _get_translation_model(from_lang: str, to_lang: str) -> ITranslation:
+    """
+    Load and cache translation model for specific language pair.
+    maxsize=2 cache up to 2 different combinations of (from_lang, to_lang).
+
+    Args:
+        from_lang: Source language code ('it' or 'en')
+        to_lang: Target language code ('it' or 'en')
+
+    Returns:
+        Cached translation model
+    """
+    installed_languages = argostranslate.translate.get_installed_languages()
+
+    from_language = next(filter(lambda x: x.code == from_lang, installed_languages), None)
+    to_language = next(filter(lambda x: x.code == to_lang, installed_languages), None)
+
+    if from_language is None or to_language is None:
+        raise RuntimeError(f"Language pair {from_lang}->{to_lang} not installed. Run setup_argos_translation() first.")
+
+    return from_language.get_translation(to_language)
 
 
 def init_translators():
-    """Warm up translators at startup. Returns (it_en, en_it)."""
-    return _load_translators()
-
-
-def translate_short_text(text: str, src_lang: str, tgt_lang: str) -> str:
     """
-    Translate text using NLLB model.
-
-    Args:
-        text: Text to translate
-        src_lang: Source language code ('ita_Latn' or 'eng_Latn')
-        tgt_lang: Target language code ('ita_Latn' or 'eng_Latn')
+    Warm up translators at startup.
+    Pre-loads both it->en and en->it models.
     """
-    model, tokenizer = _load_translators()
-
-    # Set source language
-    tokenizer.src_lang = src_lang
-
-    # Tokenize
-    inputs = tokenizer(text, return_tensors="pt", padding=True)
-
-    # Move to device
-    if DEVICE in ["cuda", "mps"]:
-        inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
-
-    # Generate translation
-    translated_tokens = model.generate(
-        **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_lang), max_new_tokens=128, num_beams=5
-    )
-
-    # Decode
-    return tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    logger.info("Initializing translation models...")
+    try:
+        # Try to load models, if not installed, set them up first
+        _get_translation_model("it", "en")
+        _get_translation_model("en", "it")
+        logger.info("✅ Translation models initialized")
+    except RuntimeError:
+        logger.info("Translation packages not found, installing...")
+        setup_argos_translation()
+        _get_translation_model("it", "en")
+        _get_translation_model("en", "it")
+        logger.info("✅ Translation models initialized")
 
 
-# The best batch size is hardware-dependent.
-
-# return_tensors="pt": returns tokenized outputs as torch.Tensor objects.
-# Without it you’d typically get Python lists.
-#
-# padding=True pads shorter sequences in the batch so that all examples have the same length,
-# which is required to stack them into a single tensor batch.
-# With True, padding is usually to the length of the longest sequence in that batch (dynamic padding)
-#
-# truncation=True: if an input is longer than the limit, it is cut to fit the maximum length
-#
-# max_length=max_input_tokens: the maximum number of tokens used for padding/truncation (not characters).
-# If truncation=True, longer sequences are truncated to this value;
-# if padding uses a fixed strategy, it pads up to this value.
-
-# forced_bos_token_id=forced_bos: forces the first generated token to be a specific token id.
-# For NLLB this is how you force the target language at generation time (you pass the id of eng_Latn, ita_Latn, etc.).
-
-# num_beams=num_beams: beam search width.
-# Higher values explore more candidate translations and often improve quality, but increase compute/latency.
-# It doesn’t “translate more text”; it mostly changes which translation is chosen.
-
-# max_new_tokens=max_new_tokens: caps how many new tokens the model may generate (output length limit).
-
-# early_stopping=True: in beam search,
-# stops once the algorithm decides continuing won’t improve the best finished hypotheses
-
-# English: often ~0.7–1.3 tokens per word (so 256 tokens might be ~200–350 words).
-
-
-# This split the text into a list of sentences based on punctuation.
-_SENT_SPLIT = re.compile(r"(?<=[\.\!\?])\s+")
+# ============================================================================
+# Text Preprocessing
+# ============================================================================
 
 
 def unwrap_pdf_wrapped_lines(text: str) -> str:
-    # Keep blank lines as paragraph separators
+    """
+    Clean up PDF text artifacts: unwrap hyphenated line breaks,
+    join lines within paragraphs, preserve paragraph boundaries.
+    """
     text = text.strip("\n")
 
     # Join hyphenated line breaks: "prepara-\nzione" -> "preparazione"
@@ -103,100 +123,97 @@ def unwrap_pdf_wrapped_lines(text: str) -> str:
 
     # Normalize spaces
     text = re.sub(r"[ \t]+", " ", text)
+
     return text
 
 
-def translate_paragraphs_by_sentences(
-    text: str,
-    *,
-    model,
-    tokenizer,
-    src_lang: str,
-    tgt_lang: str,
-    device: str,
-    batch_size: int = 32,
-    max_input_tokens: int = 256,
-    max_new_tokens: int = 256,
-    num_beams: int = 5,
-) -> str:
-    tokenizer.src_lang = src_lang
+# ============================================================================
+# Translation Functions
+# ============================================================================
 
-    forced_bos = tokenizer.convert_tokens_to_ids(tgt_lang)
 
+def _translate_text_core(text: str, translation_model: ITranslation, max_segment_size: int = 500) -> str:
+    """Core translation logic without model loading"""
     text = unwrap_pdf_wrapped_lines(text)
-    paragraphs = text.split("\n\n")
 
-    out_paras = []
+    if len(text) <= max_segment_size:
+        return translation_model.translate(text)
+
+    paragraphs = text.split("\n\n")
+    translated_paras = []
+
     for para in paragraphs:
         para = para.strip()
         if not para:
-            out_paras.append("")
+            translated_paras.append("")
             continue
+        translated = translation_model.translate(para)
 
-        sents = _SENT_SPLIT.split(para)
-
-        translated = []
-        for i in range(0, len(sents), batch_size):
-            batch = [s for s in sents[i : i + batch_size] if s.strip()]
-            if not batch:
-                continue
-
-            enc = tokenizer(
-                batch,
-                return_tensors="pt",  # pythorch tensor instead of list
-                padding=True,
-                truncation=True,
-                max_length=max_input_tokens,
+        expansion_ratio = len(translated) / len(para) if para else 0
+        if expansion_ratio > 10:
+            logger.warning(
+                f"Translation expansion {expansion_ratio:.1f}x detected. "
+                f"Possible quality issue. Original: {para} \n Translated: {translated}"
             )
-            if device in ("cuda", "mps"):
-                enc = {k: v.to(device) for k, v in enc.items()}
 
-            with torch.inference_mode():
-                gen = model.generate(
-                    **enc,
-                    forced_bos_token_id=forced_bos,
-                    num_beams=num_beams,
-                    max_new_tokens=max_new_tokens,
-                    early_stopping=True,
-                )
-            # Extend list by appending elements from the iterable.
-            translated.extend(tokenizer.batch_decode(gen, skip_special_tokens=True))
+        translated_paras.append(translated)
 
-        out_paras.append(" ".join(t.strip() for t in translated if t.strip()))
-
-    return "\n\n".join(out_paras)
+    return "\n\n".join(translated_paras)
 
 
-def translate_docs_it_to_en(docs: list[Document], src_lang: str, tgt_lang: str) -> list[Document]:
+def translate_text(text: str, src_lang: str = "it", tgt_lang: str = "en", max_segment_size: int = 500) -> str:
     """
-    Translate Italian documents to English with progress bar and logging.
-    """
-    model, tokenizer = _load_translators()
+    Translate text using Argos Translate.
+    Handles both short and long text automatically.
 
-    logger.info(f"Starting translation of {len(docs)} Italian chunks")
-    console.print(f"🗣️  Translating {len(docs)} Italian chunks to English...", style="bold")
+    Args:
+        text: Text to translate
+        src_lang: Source language code ('it' or 'en')
+        tgt_lang: Target language code ('it' or 'en')
+        max_segment_size: Max characters per segment for quality
+
+    Returns:
+        Translated text
+    """
+    model = _get_translation_model(src_lang, tgt_lang)
+    return _translate_text_core(text, model, max_segment_size)
+
+
+# ============================================================================
+# Sequential Translation (Simple)
+# ============================================================================
+
+
+def translate_docs_sequential(docs: list[Document], src_lang: str = "it", tgt_lang: str = "en") -> list[Document]:
+    """
+    Translate documents sequentially (no parallelization).
+    Simpler, but slower for large document sets.
+
+    Args:
+        docs: List of Document objects to translate
+        src_lang: Source language code
+        tgt_lang: Target language code
+
+    Returns:
+        List of translated Document objects
+    """
+    logger.info(f"Starting sequential translation of {len(docs)} chunks")
+    console.print(f"🗣️  Translating {len(docs)} chunks ({src_lang} → {tgt_lang})...", style="bold")
 
     out = []
     for i, d in enumerate(tqdm(docs, desc="Translate chunks", unit="chunk")):
         try:
-            en_text = translate_paragraphs_by_sentences(
-                d.page_content,
-                model=model,
-                tokenizer=tokenizer,
-                src_lang=src_lang,
-                tgt_lang=tgt_lang,
-                device=DEVICE,
-            )
+            translation = translate_text(d.page_content, src_lang=src_lang, tgt_lang=tgt_lang)
 
-            # clone doc, keep provenance
+            # Create new document with translation
             new_meta = dict(d.metadata)
-            new_meta["orig_lang"] = "it"
-            new_meta["translated_to"] = "en"
+            new_meta["orig_lang"] = src_lang
+            new_meta["translated_to"] = tgt_lang
             new_meta["orig_page_content"] = d.page_content
 
-            out.append(Document(page_content=en_text, metadata=new_meta))
+            out.append(Document(page_content=translation, metadata=new_meta))
 
-            # Optional: log every Nth chunk for long jobs
+            # Log progress every 50 chunks
             if (i + 1) % 50 == 0:
                 logger.info(f"Translated {i + 1}/{len(docs)} chunks")
                 console.print(f"  ✓ {i + 1}/{len(docs)} chunks done", style="green")
@@ -204,33 +221,142 @@ def translate_docs_it_to_en(docs: list[Document], src_lang: str, tgt_lang: str) 
         except Exception as e:
             logger.error(f"Translation failed for chunk {i} ({d.metadata.get('source', 'unknown')}): {e}")
             console.print(f"  ❌ Chunk {i} failed: {e}", style="red")
-            # Keep original chunk with error metadata instead of crashing
+
+            # Keep original with error metadata
             new_meta = dict(d.metadata)
             new_meta["translation_error"] = str(e)
             out.append(Document(page_content=d.page_content, metadata=new_meta))
 
-    logger.info(f"Translation complete: {len(out)} chunks processed")
+    logger.info(f"✅ Translation complete: {len(out)} chunks processed")
     console.print(f"✅ Translation complete: {len(out)} chunks processed", style="bold green")
 
     return out
 
 
-def translate_long_text(text: str, src_lang: str, tgt_lang: str) -> str:
-    """
-    Translate long text (e.g., final RAG answer) using sentence-level batching.
-    Avoids truncation by splitting into manageable chunks.
-    """
-    model, tokenizer = _load_translators()
+# ============================================================================
+# Parallel Translation (Fast)
+# ============================================================================
 
-    return translate_paragraphs_by_sentences(
-        text,
-        model=model,
-        tokenizer=tokenizer,
-        src_lang=src_lang,
-        tgt_lang=tgt_lang,
-        device=DEVICE,
-        batch_size=16,  # smaller batch for long sentences
-        max_input_tokens=256,  # per-sentence token limit
-        max_new_tokens=256,  # allows longer outputs per sentence
-        num_beams=5,  # balance quality/speed
+
+def _init_worker_process(src_lang: str, tgt_lang: str):
+    """Initialize translation model in worker process (for parallel execution)"""
+    global _worker_translation_model
+
+    installed_languages = argostranslate.translate.get_installed_languages()
+    from_language = next(filter(lambda x: x.code == src_lang, installed_languages))
+    to_language = next(filter(lambda x: x.code == tgt_lang, installed_languages))
+
+    _worker_translation_model = from_language.get_translation(to_language)
+
+
+def _translate_chunk_worker(text: str, max_segment_size: int = 500) -> str:
+    """Parallel version - uses pre-loaded global model"""
+    global _worker_translation_model
+    return _translate_text_core(text, _worker_translation_model, max_segment_size)
+
+
+def translate_docs_parallel(
+    docs: list[Document], src_lang: str = "it", tgt_lang: str = "en", max_workers: int = 2
+) -> list[Document]:
+    """
+    Translate documents in parallel using ProcessPoolExecutor.
+    Faster for large document sets (hundreds of chunks).
+
+    Args:
+        docs: List of Document objects to translate
+        src_lang: Source language code
+        tgt_lang: Target language code
+        max_workers: Number of parallel workers
+
+    Returns:
+        List of translated Document objects
+    """
+
+    logger.info(f"Starting parallel translation of {len(docs)} chunks with {max_workers} workers")
+    console.print(
+        f"🗣️  Translating {len(docs)} chunks ({src_lang} → {tgt_lang}) with {max_workers} workers...", style="bold"
     )
+
+    translations = [None] * len(docs)
+
+    with ProcessPoolExecutor(
+        max_workers=max_workers, initializer=_init_worker_process, initargs=(src_lang, tgt_lang)
+    ) as executor:
+        # Submit all translation tasks
+        from concurrent.futures import as_completed
+
+        future_to_idx = {
+            executor.submit(_translate_chunk_worker, doc.page_content): idx for idx, doc in enumerate(docs)
+        }
+
+        # Collect results with progress bar
+        for future in tqdm(as_completed(future_to_idx), total=len(docs), desc="Translate chunks", unit="chunk"):
+            idx = future_to_idx[future]
+            try:
+                translation = future.result()
+                translations[idx] = translation
+            except Exception as e:
+                logger.error(f"Translation failed for chunk {idx}: {e}")
+                translations[idx] = None  # Mark as failed
+
+    # Build output documents
+    out = []
+    for i, (doc, translation) in enumerate(zip(docs, translations, strict=False)):
+        if translation is not None:
+            new_meta = dict(doc.metadata)
+            new_meta["orig_lang"] = src_lang
+            new_meta["translated_to"] = tgt_lang
+            new_meta["orig_page_content"] = doc.page_content
+
+            out.append(Document(page_content=translation, metadata=new_meta))
+        else:
+            # Keep original if translation failed
+            console.print(f"  ❌ Chunk {i} failed", style="red")
+            new_meta = dict(doc.metadata)
+            new_meta["translation_error"] = "Parallel translation failed"
+            out.append(Document(page_content=doc.page_content, metadata=new_meta))
+
+    logger.info(f"✅ Translation complete: {len(out)} chunks processed")
+    console.print(f"✅ Translation complete: {len(out)} chunks processed", style="bold green")
+
+    return out
+
+
+# ============================================================================
+# Main Translation Function (Auto-selects strategy)
+# ============================================================================
+
+
+def translate_docs(
+    docs: list[Document], src_lang: str = "it", tgt_lang: str = "en", parallel: bool = True, max_workers: int = 2
+) -> list[Document]:
+    """
+    Translate documents with automatic strategy selection.
+
+    Args:
+        docs: List of Document objects to translate
+        src_lang: Source language code ('it' or 'en')
+        tgt_lang: Target language code ('it' or 'en')
+        parallel: Use parallel processing (default True for >10 docs)
+        max_workers: Number of parallel workers (only if parallel=True)
+
+    Returns:
+        List of translated Document objects
+    """
+    # Auto-select strategy based on document count
+    if parallel and len(docs) > 10:
+        return translate_docs_parallel(docs, src_lang, tgt_lang, max_workers)
+    else:
+        return translate_docs_sequential(docs, src_lang, tgt_lang)
+
+
+# ============================================================================
+# Backward Compatibility Aliases
+# ============================================================================
+
+
+def translate_docs_it_to_en(
+    docs: list[Document], src_lang: str = "it", tgt_lang: str = "en", parallel: bool = True, max_workers: int = 2
+) -> list[Document]:
+    """Legacy function name - redirects to translate_docs()"""
+    return translate_docs(docs, src_lang=src_lang, tgt_lang=tgt_lang, parallel=parallel, max_workers=max_workers)

@@ -6,7 +6,7 @@ import fasttext
 from langdetect import detect_langs
 
 from src.loggers import Logger
-from src.translate import translate_long_text, translate_short_text
+from src.translate import translate_text
 
 logger = Logger.get_logger(__name__)
 
@@ -38,8 +38,6 @@ class BilingualQuestion:
     FASTTEXT_CONFIDENCE_THRESHOLD = 0.2
 
     MED_PREFIX = "[medical context] "
-
-    LANG_CODES = {"it": "ita_Latn", "en": "eng_Latn"}
 
     ITALIAN_WORLDS = {
         "ciao",
@@ -93,19 +91,19 @@ class BilingualQuestion:
         if self.lang == "it":
             self.it = self.text
             hinted = self.MED_PREFIX + self.text.lstrip()
-            en = translate_short_text(hinted, src_lang=self.LANG_CODES["it"], tgt_lang=self.LANG_CODES["en"])
+            en = translate_text(hinted, src_lang="it", tgt_lang="en")
             if en.lower().startswith(self.MED_PREFIX.lower()):
                 en = en[len(self.MED_PREFIX) :].lstrip()
             self.en = en
         else:
             self.en = self.text
-            self.it = translate_short_text(self.text, src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
+            self.it = translate_text(self.text, src_lang="en", tgt_lang="it")
 
     def translate_to_italian(self, text: str) -> str:
         """Assume the input is in English"""
         if not text:
             return ""
-        text_it = translate_long_text(text.strip(), src_lang=self.LANG_CODES["en"], tgt_lang=self.LANG_CODES["it"])
+        text_it = translate_text(text.strip(), src_lang="en", tgt_lang="it")
         return text_it
 
     # -------------------------

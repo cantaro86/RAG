@@ -1,4 +1,5 @@
 accelerate
+argostranslate
 bitsandbytes
 debugpy
 faiss-cpu
