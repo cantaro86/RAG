@@ -35,7 +35,10 @@ def build_rag_agent(cfg: Config):
         quantization=cfg.quantization,
     )
 
-    llm_cleaner = llm.bind(repetition_penalty=1.0, temperature=1e-5, no_repeat_ngram_size=0, do_sample=False)
+    llm_cleaner = llm.bind(
+        repetition_penalty=1.0, temperature=1.0, no_repeat_ngram_size=0, top_p=1.0, top_k=50, do_sample=False
+    )
+    # with do_sample=False the temperature, top_p and top_k are ignored, but we set them to default values for clarity
 
     llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
     llm_messages = RunnableLambda(lambda messages: llm_cleaner.invoke(messages)["content"])

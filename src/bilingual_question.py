@@ -103,7 +103,7 @@ class BilingualQuestion:
         """Assume the input is in English"""
         if not text:
             return ""
-        text_it = translate_text(text.strip(), src_lang="en", tgt_lang="it")
+        text_it = translate_text(text.strip(), src_lang="en", tgt_lang="it", preserve_formatting=True)
         return text_it
 
     # -------------------------

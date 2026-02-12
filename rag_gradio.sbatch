@@ -4,8 +4,8 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 #SBATCH --gpus-per-node=1
-#SBATCH --time=08:45:00
-#SBATCH --qos=mira
+#SBATCH --time=3-05:00:00
+#SBATCH --qos=notimelimit
 #SBATCH --output=rag.out
 #SBATCH --error=rag.err
 
