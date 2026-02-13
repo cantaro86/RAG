@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 #SBATCH --gpus-per-node=1
-#SBATCH --time=3-05:00:00
+#SBATCH --time=2-01:00:00
 #SBATCH --qos=notimelimit
 #SBATCH --output=rag.out
 #SBATCH --error=rag.err
@@ -37,4 +37,5 @@ echo
 export GRADIO_SERVER_NAME=127.0.0.1
 export GRADIO_SERVER_PORT=${PORT}
 
+# The -u flag stands for "unbuffered"
 python -u main.py

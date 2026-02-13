@@ -61,6 +61,17 @@ class Config:
         for k, v in data.items():
             setattr(self, k, v)
 
+        self._validate_ui_mode()
+
+    def _validate_ui_mode(self):
+        chat = getattr(self, "chat", False)
+        gradio = getattr(self, "gradio", False)
+
+        if chat and gradio:
+            raise ValueError(
+                "Configuration error: 'chat' and 'gradio' are mutually exclusive. Set only one to true in config.yaml"
+            )
+
 
 config_path = Path(__file__).resolve().parents[1] / "config.yaml"
 cfg = Config(str(config_path))
@@ -73,3 +84,16 @@ if getattr(cfg, "hf_token", None):
 if getattr(cfg, "hf_home", None):
     os.makedirs(cfg.hf_home, exist_ok=True)
     os.environ["HF_HOME"] = cfg.hf_home
+
+if getattr(cfg, "debugger", False):
+    os.environ["DEBUG_MODE"] = "1"
+
+
+def attach_debugger_if_requested():
+    if os.getenv("DEBUG_MODE"):
+        import debugpy
+
+        debugpy.listen(("0.0.0.0", 5643))
+        print("✓ Models loaded. Debugger listening on 0.0.0.0:5643")
+        print("Attach now, then press Enter to continue...")
+        input()
