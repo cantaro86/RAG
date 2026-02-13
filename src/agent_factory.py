@@ -42,11 +42,12 @@ def build_rag_agent(cfg: Config):
 
     llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
     llm_messages = RunnableLambda(lambda messages: llm_cleaner.invoke(messages)["content"])
+    llm_rewriter = RunnableLambda(lambda messages: llm.invoke(messages)["content"])
 
     topic_continuity_classifier = prompt_topic | llm_runnable | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()
     cleaner_chain = prompt_clean_chat | llm_messages | StrOutputParser()
-    question_rewriter = prompt_rewrite_medical | llm_runnable | StrOutputParser()
+    question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
 
     ctx = RAGContext(
         topic_continuity_classifier=topic_continuity_classifier,

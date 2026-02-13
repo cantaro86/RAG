@@ -70,11 +70,13 @@ prompt_clean_chat = ChatPromptTemplate.from_messages(
         5. Keep ALL other sentences exactly as they are.
         6. DO NOT rephrase or summarize.
         7. Output ONLY the cleaned text. (no preambles, no explanations, no lists).
+        8. DO NOT include the words "Text to edit" or similar markers.
         """,
         ),
         (
             "user",
             """Text to edit:
+
             {answer}
         """,
         ),
@@ -83,24 +85,32 @@ prompt_clean_chat = ChatPromptTemplate.from_messages(
 
 
 # Question rewriter
-prompt_rewrite_medical = PromptTemplate(
-    template="""You are a professional assistant specialized in reformulating medical questions
-to improve information retrieval.
+prompt_rewrite_medical = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are a query rewriter for a medical information retrieval system.
 
-Your task:
-- **If the last question introduces a new topic unrelated to the history, do not rewrite it. Return it unchanged.**
-- Given the conversation history and the user's last question, rewrite the question so that it is fully explicit
-and unambiguous.
-- Replace pronouns like "their", "they", "it", "this", etc. with the actual referenced entity from the history.
-Do not add new information.
-- Rephrase the question **only if necessary** to make it clearer and more likely to match relevant documents.
-- Do not change its meaning, specificity, or focus. Keep the topic identical.
-- **Keep the question short and concise.**
-- Produce only the question, no introductions, explanations, lists, or multiple options.
+Task: Given a Question and a Conversation history,
+rewrite the question as a **standalone question** that can be understood without the conversation history.
 
-Question: {question}
-
-Conversation history (oldest first): {history}
+Instructions:
+1. If the question references the previous topic (uses pronouns, implicit context), incorporate the relevant entities
+and context from the history to make it self-contained
+2. If the question introduces a new topic unrelated to history, return it unchanged
+3. Replace pronouns ("it", "this", "their", "they") with the actual entities from history
+4. **Keep the question concise and focused**
+5. Do not answer the question or add new medical information
+6. Output ONLY the rewritten question, no introductions, explanations, lists, or multiple options.
 """,
-    input_variables=["question", "history"],
+        ),
+        (
+            "user",
+            """
+            Question: {question}
+
+            Conversation history: {history}
+            """,
+        ),
+    ]
 )
