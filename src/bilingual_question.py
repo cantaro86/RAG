@@ -97,7 +97,7 @@ class BilingualQuestion:
             self.en = en
         else:
             self.en = self.text
-            self.it = translate_text(self.text, src_lang="en", tgt_lang="it")
+            self.it = ""
 
     def translate_to_italian(self, text: str) -> str:
         """Assume the input is in English"""
