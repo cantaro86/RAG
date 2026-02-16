@@ -49,11 +49,20 @@ def build_llm_pipe(
     logger.info(f"Loading LLM: {model_name} on device {DEVICE}")
     console.print("Mode: " + ("online" if not offline else "offline"))
 
-    tok = AutoTokenizer.from_pretrained(
-        model_name,
-        token=os.environ.get("HF_TOKEN"),
-        local_files_only=offline,
-    )
+    tokenizer_kwargs = {
+        "token": os.environ.get("HF_TOKEN"),
+        "local_files_only": offline,
+    }
+
+    if "mistral" in model_name.lower():
+        tokenizer_kwargs["fix_mistral_regex"] = True
+
+    try:
+        tok = AutoTokenizer.from_pretrained(model_name, **tokenizer_kwargs)
+    except TypeError:
+        del tokenizer_kwargs["fix_mistral_regex"]
+        tok = AutoTokenizer.from_pretrained(model_name, **tokenizer_kwargs)
+        logger.warning("Could not set fix_mistral_regex=True. Ensure transformers library is up to date.")
 
     # === OPTION 1: CUDA with BitsAndBytes quantization ===
     if quantization and DEVICE == "cuda":
@@ -205,15 +214,14 @@ def build_llm_pipe(
         return {"role": "assistant", "content": result_text.strip()}
 
     class SimpleLLM:
-        def __init__(self, invoke_func):
+        def __init__(self, invoke_func, bound_kwargs=None):
             self.invoke_func = invoke_func
-            self.bound_kwargs = {}  # Store bound parameters
+            self.bound_kwargs = bound_kwargs or {}
 
         def bind(self, **kwargs):
             # Create a new instance with the bound parameters
-            new_llm = SimpleLLM(self.invoke_func)
-            new_llm.bound_kwargs = {**self.bound_kwargs, **kwargs}
-            return new_llm
+            new_kwargs = {**self.bound_kwargs, **kwargs}
+            return SimpleLLM(self.invoke_func, new_kwargs)
 
         def invoke(self, input_data):
             # Call the internal function with bound args

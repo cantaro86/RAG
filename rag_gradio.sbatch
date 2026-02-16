@@ -4,7 +4,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=20
 #SBATCH --gpus-per-node=1
-#SBATCH --time=2-01:00:00
+#SBATCH --time=1-10:00:00
 #SBATCH --qos=notimelimit
 #SBATCH --output=rag.out
 #SBATCH --error=rag.err
@@ -36,6 +36,14 @@ echo
 # Recommended: don't expose Gradio beyond the compute node
 export GRADIO_SERVER_NAME=127.0.0.1
 export GRADIO_SERVER_PORT=${PORT}
+
+# Check and set config.yaml parameters
+if ! grep -q "^gradio: true$" config.yaml; then
+    sed -i 's/^gradio: .*/gradio: true/' config.yaml
+fi
+if ! grep -q "^chat: false$" config.yaml; then
+    sed -i 's/^chat: .*/chat: false/' config.yaml
+fi
 
 # The -u flag stands for "unbuffered"
 python -u main.py
