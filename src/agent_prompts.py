@@ -3,10 +3,13 @@
 # ------------------------
 
 
-from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
-prompt_topic = PromptTemplate(
-    template="""You are a topic continuity classifier for a medical Q&A system.
+prompt_topic = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are a topic continuity classifier for a medical Q&A system.
 
 Task: Determine if the new question continues the SAME topic as the conversation history or introduces a NEW topic.
 
@@ -27,20 +30,27 @@ NEW topic means:
 
 Respond with EXACTLY one of these two strings:
 "SAME" or "NEW"
-Do NOT add introductions, explanations, lists, or multiple options.
-
+Do NOT add introductions, explanations, lists, or multiple options. """,
+        ),
+        (
+            "user",
+            """
 Conversation History (oldest first):
 {history}
 
 New question:
 {question}
 """,
-    input_variables=["history", "question"],
+        ),
+    ]
 )
 
 
-prompt_rag = PromptTemplate(
-    template="""You are a medical assistant with clinical reasoning skills.
+prompt_rag = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """You are a medical assistant with clinical reasoning skills.
 
 Context for this documentation:
 - When users ask about "colonoscopy", they refer to "CT virtual colonoscopy".
@@ -57,7 +67,11 @@ Hard rules:
 5. If Sources do not contain the answer, output EXACTLY:
    "The Information for patients and the colonoscopy literature do not contain the information."
 6. Do not refer to generic "sources" or "documents". Always specify the source by name using the "Corpus" field.
-
+""",
+        ),
+        (
+            "user",
+            """
 Current question:
 {question}
 
@@ -68,7 +82,8 @@ Conversation history:
 {history}
 
 Answer:""",
-    input_variables=["history", "context", "question"],
+        ),
+    ]
 )
 
 

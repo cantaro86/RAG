@@ -40,14 +40,14 @@ def build_rag_agent(cfg: Config):
     )
     # with do_sample=False the temperature, top_p and top_k are ignored, but we set them to default values for clarity
 
-    llm_topic_classifier = llm.bind(temperature=0.0, top_p=1.0, top_k=50, do_sample=False, max_new_tokens=5)
+    llm_topic_classifier = llm.bind(temperature=1.0, top_p=1.0, top_k=50, do_sample=False, max_new_tokens=5)
 
-    llm_runnable = RunnableLambda(lambda text: llm.invoke([{"role": "user", "content": str(text)}])["content"])
+    llm_rewriter_bound = llm.bind(temperature=0.1, top_p=0.95, top_k=50, do_sample=True)
+
+    llm_runnable = RunnableLambda(lambda messages: llm.invoke(messages)["content"])
     llm_messages = RunnableLambda(lambda messages: llm_cleaner.invoke(messages)["content"])
-    llm_rewriter = RunnableLambda(lambda messages: llm.invoke(messages)["content"])
-    llm_topic = RunnableLambda(
-        lambda text: llm_topic_classifier.invoke([{"role": "user", "content": str(text)}])["content"]
-    )
+    llm_rewriter = RunnableLambda(lambda messages: llm_rewriter_bound.invoke(messages)["content"])
+    llm_topic = RunnableLambda(lambda messages: llm_topic_classifier.invoke(messages)["content"])
 
     topic_continuity_classifier = prompt_topic | llm_topic | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()
