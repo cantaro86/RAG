@@ -44,10 +44,14 @@ def build_rag_agent(cfg: Config):
 
     llm_rewriter_bound = llm.bind(temperature=0.1, top_p=0.95, top_k=50, do_sample=True)
 
-    llm_runnable = RunnableLambda(lambda messages: llm.invoke(messages)["content"])
-    llm_messages = RunnableLambda(lambda messages: llm_cleaner.invoke(messages)["content"])
-    llm_rewriter = RunnableLambda(lambda messages: llm_rewriter_bound.invoke(messages)["content"])
-    llm_topic = RunnableLambda(lambda messages: llm_topic_classifier.invoke(messages)["content"])
+    # Extract messages from ChatPromptValue, then invoke
+    llm_runnable = RunnableLambda(lambda prompt_value: llm.invoke(prompt_value.to_messages())["content"])
+
+    llm_messages = RunnableLambda(lambda prompt_value: llm_cleaner.invoke(prompt_value.to_messages())["content"])
+
+    llm_rewriter = RunnableLambda(lambda prompt_value: llm_rewriter_bound.invoke(prompt_value.to_messages())["content"])
+
+    llm_topic = RunnableLambda(lambda prompt_value: llm_topic_classifier.invoke(prompt_value.to_messages())["content"])
 
     topic_continuity_classifier = prompt_topic | llm_topic | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()

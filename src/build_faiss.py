@@ -271,7 +271,7 @@ def build_faiss_index(cfg: Config) -> None:
     logger.info("Found %d Italian chunks to translate.", len(it_chunks))
 
     en_or_other_chunks = [c for c in chunks if c.metadata.get("language") != "it"]
-    if it_chunks:
+    if it_chunks and cfg.translate_pdf:
         en_chunks = translate_docs_it_to_en(
             it_chunks, src_lang="it", tgt_lang="en", parallel=cfg.translate_parallel, max_workers=cfg.translate_workers
         )

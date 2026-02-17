@@ -58,10 +58,8 @@ Context for this documentation:
 Hard rules:
 1. Use ONLY the Sources below to generate your Answer.
 2. The Conversation history helps you understand the Question context, but DO NOT copy answers from history.
-3. VERIFY CONDITIONS: Before listing specific steps, medications, or dosages,
-   verify that the condition described in the Sources matches the user's condition exactly.
-   - If Sources say "For condition X, do Y", and the user does NOT have condition X, do NOT output Y.
-   - Never provide detailed instructions for a condition the user has explicitly denied having.
+3. LOGICAL CONSISTENCY: Verify that the condition described in the Sources matches the user's condition exactly.
+   - Do not provide instructions for a condition the user has explicitly denied having.
 4. If the Sources mention the correct protocol (e.g., a table or section) but do not contain its details,
    simply reference that item by name and Corpus. Do not substitute details from a different protocol.
 5. If Sources do not contain the answer, output EXACTLY:
@@ -109,6 +107,7 @@ Rules:
 6. DO NOT rephrase or summarize
 7. Output ONLY the cleaned text (no preambles, no explanations)
 8. DO NOT include the words "Text to edit" or similar markers
+9. If the input text ends abruptly, DO NOT add any trailing text to the output.
 """,
         ),
         (
