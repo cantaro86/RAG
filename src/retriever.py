@@ -42,13 +42,6 @@ class ScoredCrossEncoderReranker(CrossEncoderReranker):
         sorted_docs = sorted(zip(documents, scores, strict=False), key=lambda x: x[1], reverse=True)
         top_docs = [doc for doc, _ in sorted_docs[: self.top_n]]
 
-        # print("--- sorted top (identity) ---")
-        # for i, (d, s) in enumerate(sorted_docs[: min(self.top_n, 10)]):
-        #     print(
-        #         f"[OUT {i:02d}] score={float(s):.6g} "
-        #         f"src={d.metadata.get('source')}"
-        #     )
-
         return top_docs
 
 
@@ -62,9 +55,9 @@ def build_retriever(
     k_reranked: int,
     *,
     score_key: str = "rerank_score",
-    search_type: str = "similarity",  # "similarity" | "mmr"
-    fetch_k: int | None = None,  # only used for MMR
-    lambda_mult: float = 0.3,  # 0=more diverse, 1=less diverse
+    search_type: str = "similarity",
+    fetch_k: int | None = None,
+    lambda_mult: float = 0.3,
 ) -> ContextualCompressionRetriever | VectorStoreRetriever:
     if search_type == "mmr":
         base_retriever = vs.as_retriever(
