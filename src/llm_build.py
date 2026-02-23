@@ -199,7 +199,8 @@ def build_llm_pipe(
         # Apply Mistral chat template
         prompt = tok.apply_chat_template(formatted_messages, tokenize=False, add_generation_prompt=True)
         # DEBUG: Print what we're sending to the model
-        logger.debug(f"🔍 PROMPT FROM apply_chat_template:\n{prompt}\n")
+        if cfg.debugger:
+            logger.debug(f"🔍 PROMPT FROM apply_chat_template:\n{prompt}\n")
 
         # 2. Pass updated parameters to the generator
         if use_mlx:
