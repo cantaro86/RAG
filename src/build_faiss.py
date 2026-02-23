@@ -29,8 +29,8 @@ logger = Logger.get_logger(__name__)
 
 
 TESS_LANG_MAP: dict[str, str] = {
-    "en": "eng",
-    "it": "ita",
+    "en": "eng+ita",
+    "it": "ita+eng",
 }
 
 
@@ -52,7 +52,7 @@ def load_parents_map(path: str) -> dict[str, Document]:
 
 def _detect_lang_safe(text: str) -> str:
     try:
-        if text and len(text) >= 50:
+        if text and len(text) >= 120:
             return detect(text)
     except Exception:
         pass
@@ -60,7 +60,7 @@ def _detect_lang_safe(text: str) -> str:
 
 
 def _tess_lang(lang: str) -> str:
-    return TESS_LANG_MAP.get(lang, "eng")
+    return TESS_LANG_MAP.get(lang, "eng+ita")
 
 
 def _ocr_one_page(task: tuple[str, int, str, int, str | None]) -> tuple[str, int, str, str, str | None]:
