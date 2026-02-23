@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass, fields
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -6,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from src._load_env import cfg
 from src.bilingual_question import BilingualQuestion
+from src.build_faiss import children_to_parents, load_parents_map, prefer_pagepair_over_page
 from src.loggers import Logger
 from src.state import GraphState
 from src.utils import print_sources, render_context
@@ -95,29 +97,39 @@ def retrieve_and_filter(state, retriever):
     logger.debug("---RETRIEVE + FILTER---")
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
+    use_parents = getattr(cfg, "use_parents", False)
 
     # Retrieve from both languages if needed
     q = BilingualQuestion(question)
-    docs_en = retriever.invoke(q.en)
+    children = retriever.invoke(q.en)
 
-    relevant_docs = [d for d in docs_en if d.metadata.get("rerank_score", 0) > cfg.threshold]
-    # score_prob = []
-
-    # Debug info
-    if logger.level <= logging.DEBUG:
-        ### Uncomment if you use a model with scores that need to be converted to probabilities
-        # for d in relevant_docs:
-        #     _rerank_score = d.metadata["rerank_score"]
-        #     score_prob.append(
-        #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
-        #     )
-        sources_table = print_sources(relevant_docs)
-
-    logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
-    # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
-    logger.debug(f"Top sources:\n{sources_table}")
+    relevant_docs = [d for d in children if float(d.metadata.get("rerank_score", 0)) > cfg.threshold]
 
     if relevant_docs:
+        if use_parents:
+            # collapse children -> parents -> dedup
+            parents_map = load_parents_map(os.path.join(cfg.index_dir, "parents.pkl"))
+            docs = children_to_parents(relevant_docs, parents_map, k_parents=getattr(cfg, "k_parents", 4))
+            docs = prefer_pagepair_over_page(docs, score_key="rerank_score")
+            logger.debug("Using parent documents.")
+        else:
+            docs = relevant_docs
+
+        # score_prob = []
+        # Debug info
+        if logger.level <= logging.DEBUG:
+            ### Uncomment if you use a model with scores that need to be converted to probabilities
+            # for d in relevant_docs:
+            #     _rerank_score = d.metadata["rerank_score"]
+            #     score_prob.append(
+            #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
+            #     )
+            sources_table = print_sources(relevant_docs)
+
+        logger.debug(f"Retrieved {len(children)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
+        # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
+        logger.debug(f"Top sources:\n{sources_table}")
+
         logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
         return {
             **state,
