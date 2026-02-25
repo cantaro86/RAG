@@ -52,9 +52,6 @@ prompt_rag = ChatPromptTemplate.from_messages(
             "system",
             """You are a medical assistant with clinical reasoning skills.
 
-Context for this documentation:
-- When users ask about "colonoscopy", they refer to "CT virtual colonoscopy".
-
 Hard rules:
 1. Use ONLY the Sources below to generate your Answer.
 2. The Conversation history helps you understand the Question context, but DO NOT copy answers from history.
