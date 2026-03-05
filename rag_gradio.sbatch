@@ -2,12 +2,13 @@
 #SBATCH --job-name=rag
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=20
+#SBATCH --cpus-per-task=10
 #SBATCH --gpus-per-node=1
-#SBATCH --time=1-10:00:00
+#SBATCH --time=5-10:00:00
 #SBATCH --qos=notimelimit
 #SBATCH --output=rag.out
 #SBATCH --error=rag.err
+#SBATCH --nodelist=dgx02
 
 module load conda
 eval "$(conda shell.bash hook)"
