@@ -9,6 +9,7 @@ from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: s
 from src.agent_factory import build_rag_agent
 from src.bilingual_question import BilingualQuestion
 from src.build_faiss import build_faiss_index
+from src.build_markdown import create_markdown_from_pdf, find_missing_markdown
 from src.loggers import Logger
 from src.translate import init_translators
 from src.ui_gradio import launch_gradio
@@ -98,6 +99,22 @@ def main():
         logger.error(f"Failed to initialize translators: {e}")
         console.print("[red]Failed to initialize translators. Check configuration or models.[/red]")
         return
+
+    # Check if markdown files exist, if not create them from PDFs
+    if not os.path.isdir(cfg.md_dir) or not os.listdir(cfg.md_dir) or cfg.reindex:
+        console.print(f"[yellow]Markdown files not found in {cfg.md_dir}. Creating from PDFs...[/yellow]")
+        logger.info(f"Markdown files not found in {cfg.md_dir}. Creating from PDFs...")
+        create_markdown_from_pdf(cfg.pdf_dir, cfg.md_dir)
+
+    missing_files = find_missing_markdown(cfg.pdf_dir, cfg.md_dir)
+    if missing_files:
+        console.print(
+            f"[red]Warning: The following PDF files do not have corresponding markdown files in {cfg.md_dir}:[/red]"
+        )
+        logger.warning(f"Missing markdown files for PDFs: {[file.name for file in missing_files]}")
+        create_markdown_from_pdf(cfg.pdf_dir, cfg.md_dir, files=[file.name for file in missing_files])
+    else:
+        logger.info("All PDFs have corresponding markdown files.")
 
     # Rebuild FAISS index if requested
     if getattr(cfg, "reindex", False):

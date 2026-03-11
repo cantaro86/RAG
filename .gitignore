@@ -13,7 +13,8 @@ jupyter.sbatch
 *ipynb*
 
 Colon-TC
-Colon-TC_old
+Colon-TC_*
+Markdown
 Output
 docs
 faiss_index
