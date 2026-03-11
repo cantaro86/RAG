@@ -17,10 +17,10 @@ logger = Logger.get_logger(__name__)
 class MPSSentenceCrossEncoder(BaseCrossEncoder):
     def __init__(self, model_name: str):
         self.device = DEVICE
-        self.model = CrossEncoder(model_name, device=self.device)
+        self.model = CrossEncoder(model_name, device=self.device, max_length=2048)
 
     def score(self, pairs: list[tuple[str, str]]) -> list[float]:
-        scores = self.model.predict(pairs)
+        scores = self.model.predict(pairs, batch_size=16)
         return [float(s) for s in scores]
 
 
