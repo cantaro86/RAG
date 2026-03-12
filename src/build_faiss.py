@@ -5,6 +5,7 @@
 
 import os
 import re
+import unicodedata
 from pathlib import Path
 
 import faiss
@@ -19,6 +20,24 @@ from src.loggers import Logger
 from src.translate import translate_docs_it_to_en
 
 logger = Logger.get_logger(__name__)
+
+
+def _normalize(text: str) -> str:
+    """Lowercase, strip accents and punctuation for robust section matching."""
+    text = text.lower().strip()
+    text = unicodedata.normalize("NFKD", text)
+    return re.sub(r"[^a-z0-9 ]", "", text)
+
+
+SKIP_SECTIONS = {"references", "riferimenti", "bibliografia"}
+NOSPLIT_SECTIONS = {
+    "recommendation",
+    "recommendations",
+    "raccomandazione",
+    "raccomandazioni",
+    "main recommendation",
+    "main recommendations",
+}
 
 
 def _detect_lang_safe(text: str) -> str:
@@ -37,11 +56,18 @@ LIST_ITEM_RE = re.compile(r"^(\d{1,2}[\.\)]\s|\d{1,2}\s(?=[A-Z])|[-•*]\s)")
 CONTINUATION_RE = re.compile(r"^(\d{1,2})[\.\)]?\s(?=[A-Z]|\d)")
 
 
-splitter = RecursiveCharacterTextSplitter(
+_SPLITTER = RecursiveCharacterTextSplitter(
     chunk_size=1500,
     chunk_overlap=300,
     separators=["\n", ". ", "? ", "! ", " ", ""],
     keep_separator="end",
+)
+
+# Splitter that never splits (chunk_size large enough for any section)
+_NOSPLIT_SPLITTER = RecursiveCharacterTextSplitter(
+    chunk_size=100_000,
+    chunk_overlap=0,
+    separators=[],
 )
 
 
@@ -64,7 +90,7 @@ def split_block_by_type(block: str) -> list[tuple[str, str]]:
         if is_heading or is_table:
             # Always a hard boundary
             commit()
-            current_type = "text"
+            current_type = "heading" if is_heading else "text"
             current_lines.append(line)
         elif is_list_line:
             if current_type != "list":
@@ -73,9 +99,14 @@ def split_block_by_type(block: str) -> list[tuple[str, str]]:
             current_lines.append(line)
         else:
             if current_type == "list":
-                # Stay in list mode — could be continuation text of an item
-                # or noise between items (handled by merge_continuation_lists)
-                current_lines.append(line)
+                if line.startswith((" ", "\t")):
+                    # Indented: genuine continuation of a list item
+                    current_lines.append(line)
+                else:
+                    # Non-indented: paragraph after the list, start new text segment
+                    commit()
+                    current_type = "text"
+                    current_lines.append(line)
             else:
                 if current_type != "text":
                     commit()
@@ -148,6 +179,15 @@ def chunk_markdown(md_path: Path) -> list[Document]:
         if heading_match:
             current_section = heading_match.group(2)
 
+        # ── Section-level rules ──────────────────────────────────
+        section_key = _normalize(current_section)
+
+        if section_key in SKIP_SECTIONS:
+            continue
+
+        active_splitter = _NOSPLIT_SPLITTER if section_key in NOSPLIT_SECTIONS else _SPLITTER
+        # ─────────────────────────────────────────────────────────
+
         blocks = [b.strip() for b in re.split(r"\n{2,}", section) if b.strip()]
         pending_text: list[str] = []
 
@@ -156,18 +196,21 @@ def chunk_markdown(md_path: Path) -> list[Document]:
             is_table = bool(TABLE_RE.search(block))
 
             if is_table:
-                carried_heading = _flush_text(
-                    chunks=chunks,
-                    pending_text=pending_text,
-                    carried_heading=carried_heading,
-                    source=md_path.name,
-                    section=current_section,
-                    language=doc_lang,
-                    splitter=splitter,
-                )
+                if pending_text:
+                    carried_heading = _flush_text(
+                        chunks=chunks,
+                        pending_text=pending_text,
+                        carried_heading=carried_heading,
+                        source=md_path.name,
+                        section=current_section,
+                        language=doc_lang,
+                        splitter=active_splitter,
+                    )
+                table_content = f"{carried_heading}\n{block}".strip() if carried_heading else block
+                carried_heading = ""
                 chunks.append(
                     Document(
-                        page_content=block,
+                        page_content=table_content,
                         metadata=_make_metadata(md_path.name, current_section, doc_lang, type="table"),
                     )
                 )
@@ -180,7 +223,7 @@ def chunk_markdown(md_path: Path) -> list[Document]:
                     source=md_path.name,
                     section=current_section,
                     language=doc_lang,
-                    splitter=splitter,
+                    splitter=active_splitter,
                 )
                 carried_heading = f"{carried_heading}\n{block}".strip() if carried_heading else block
 
@@ -189,6 +232,40 @@ def chunk_markdown(md_path: Path) -> list[Document]:
                 if any(t == "list" for t, _ in segments):
                     for seg_type, seg_content in segments:
                         if seg_type == "list":
+                            list_intro = ""
+                            if pending_text:
+                                last_lines = pending_text[-1].splitlines()
+                                if last_lines[-1].rstrip().endswith(":"):
+                                    list_intro = last_lines[-1].rstrip()
+                                    if len(last_lines) == 1:
+                                        pending_text.pop()
+                                    else:
+                                        pending_text[-1] = "\n".join(last_lines[:-1])
+                            if pending_text:
+                                carried_heading = _flush_text(
+                                    chunks=chunks,
+                                    pending_text=pending_text,
+                                    carried_heading=carried_heading,
+                                    source=md_path.name,
+                                    section=current_section,
+                                    language=doc_lang,
+                                    splitter=active_splitter,
+                                )
+                            prefix_parts = []
+                            if carried_heading:
+                                prefix_parts.append(carried_heading)
+                                carried_heading = ""
+                            if list_intro:
+                                prefix_parts.append(list_intro)
+                            prefix = "\n".join(prefix_parts)
+                            content = f"{prefix}\n{seg_content}".strip() if prefix else seg_content
+                            chunks.append(
+                                Document(
+                                    page_content=content,
+                                    metadata=_make_metadata(md_path.name, current_section, doc_lang, type="list"),
+                                )
+                            )
+                        elif seg_type == "heading":
                             carried_heading = _flush_text(
                                 chunks=chunks,
                                 pending_text=pending_text,
@@ -196,20 +273,16 @@ def chunk_markdown(md_path: Path) -> list[Document]:
                                 source=md_path.name,
                                 section=current_section,
                                 language=doc_lang,
-                                splitter=splitter,
+                                splitter=active_splitter,
                             )
-                            chunks.append(
-                                Document(
-                                    page_content=seg_content,
-                                    metadata=_make_metadata(md_path.name, current_section, doc_lang, type="list"),
-                                )
+                            carried_heading = (
+                                f"{carried_heading}\n{seg_content}".strip() if carried_heading else seg_content
                             )
                         else:
                             pending_text.append(seg_content)
                 else:
                     pending_text.append(block)
 
-        # Capture return value to reset carried_heading between sections
         carried_heading = _flush_text(
             chunks=chunks,
             pending_text=pending_text,
@@ -217,7 +290,7 @@ def chunk_markdown(md_path: Path) -> list[Document]:
             source=md_path.name,
             section=current_section,
             language=doc_lang,
-            splitter=splitter,
+            splitter=active_splitter,
         )
 
     return chunks
@@ -225,10 +298,14 @@ def chunk_markdown(md_path: Path) -> list[Document]:
 
 def merge_continuation_lists(chunks: list[Document]) -> list[Document]:
     """
-    Merge list chunks that start at item > 1 into the most recent
-    preceding list chunk from the same source document.
+    Merge list chunks that start at a numbered item > 1 into the most recent
+    preceding numbered list chunk from the same source,
+    but only if that predecessor's last numbered item is n-1.
+    Noise-only list chunks (no numbered items) are skipped during the search.
+    Leading noise lines before a continuation item are moved to the
+    nearest preceding chunk of any type.
     """
-    result = list(chunks)  # copy to avoid mutating original
+    result = list(chunks)
 
     i = 0
     while i < len(result):
@@ -237,30 +314,69 @@ def merge_continuation_lists(chunks: list[Document]) -> list[Document]:
             i += 1
             continue
 
-        # Check if this list starts at item > 1 (continuation)
-        first_line = chunk.page_content.splitlines()[0]
-        m = CONTINUATION_RE.match(first_line)
-        if not m or int(m.group(1)) <= 1:
+        # Scan first 5 lines to find a numbered item
+        # If item 1 is found first → normal list start, not a continuation
+        lines = chunk.page_content.splitlines()
+        continuation_n = None
+        noise_line_count = 0
+
+        for idx, line in enumerate(lines[:5]):
+            m = CONTINUATION_RE.match(line)
+            if m:
+                n = int(m.group(1))
+                if n <= 1:
+                    break  # normal list start, abort
+                else:
+                    continuation_n = n
+                    noise_line_count = idx
+                    break
+
+        if continuation_n is None:
             i += 1
             continue
 
-        # Find the most recent list chunk from the same source
+        # Strip leading noise lines and move them to the nearest preceding chunk
+        if noise_line_count > 0:
+            noise_content = "\n".join(lines[:noise_line_count])
+            clean_content = "\n".join(lines[noise_line_count:])
+            result[i] = Document(page_content=clean_content, metadata=chunk.metadata)
+            chunk = result[i]
+            if i > 0:
+                prev = result[i - 1]
+                result[i - 1] = Document(
+                    page_content=prev.page_content + "\n" + noise_content,
+                    metadata=prev.metadata,
+                )
+
+        # Find the most recent preceding list chunk that has numbered items
         source = chunk.metadata.get("source")
         predecessor_idx = None
         for j in range(i - 1, -1, -1):
             if result[j].metadata.get("type") == "list" and result[j].metadata.get("source") == source:
-                predecessor_idx = j
-                break
+                has_numbered = any(CONTINUATION_RE.match(line) for line in result[j].page_content.splitlines())
+                if has_numbered:
+                    predecessor_idx = j
+                    break
+                # else: noise-only list, keep searching backwards
 
         if predecessor_idx is not None:
-            # Merge: append continuation text to predecessor
-            merged_content = result[predecessor_idx].page_content + "\n" + chunk.page_content
-            result[predecessor_idx] = Document(
-                page_content=merged_content,
-                metadata=result[predecessor_idx].metadata,
-            )
-            result.pop(i)  # remove the continuation chunk
-            # Don't increment i — recheck the same position
+            # Verify predecessor's last numbered item is exactly n-1
+            pred_last_n = None
+            for line in reversed(result[predecessor_idx].page_content.splitlines()):
+                m = CONTINUATION_RE.match(line)
+                if m:
+                    pred_last_n = int(m.group(1))
+                    break
+
+            if pred_last_n == continuation_n - 1:
+                merged_content = result[predecessor_idx].page_content + "\n" + chunk.page_content
+                result[predecessor_idx] = Document(
+                    page_content=merged_content,
+                    metadata=result[predecessor_idx].metadata,
+                )
+                result.pop(i)  # remove continuation, don't increment
+            else:
+                i += 1
         else:
             i += 1
 
