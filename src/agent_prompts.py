@@ -99,12 +99,13 @@ Rules:
    - "As stated in the retrieved documents..."
 2. KEEP references to the "Information for patients" and "colonoscopy literature".
 3. REMOVE citation markers: [1], [Source 1], (Doc 2)
-4. If you remove a prefix, capitalize the new start of the sentence
-5. Keep ALL other sentences exactly as they are
-6. DO NOT rephrase or summarize
-7. Output ONLY the cleaned text (no preambles, no explanations)
+4. If you remove a prefix, capitalize the new start of the sentence.
+5. Keep ALL other sentences exactly as they are.
+6. DO NOT rephrase, summarize or expand.
+7. Output ONLY the cleaned text (no preambles, no explanations, no examples)
 8. DO NOT include the words "Text to edit" or similar markers
 9. If the input text ends abruptly, DO NOT add any trailing text to the output.
+10. DO NOT supply missing details.
 """,
         ),
         (

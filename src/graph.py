@@ -1,4 +1,5 @@
 import logging
+import re
 from dataclasses import dataclass, fields
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -160,15 +161,27 @@ def generate_with_docs(state, rag_chain):
     return {**state, "generation": answer, "rewrite_count": 0, "history": msgs}
 
 
+_META_PATTERNS = re.compile(
+    r"based on (the )?(provided |retrieved )?(sources?|context|documents?)|"
+    r"according to (the )?sources?|"
+    r"as (mentioned|stated) in (the )?(conversation history|retrieved documents?)|"
+    r"the sources? indicate|"
+    r"\[(doc|source)?\s?\d+\]",
+    flags=re.IGNORECASE,
+)
+
+
 def clean_answer(state, cleaner_chain):
     logger.debug("--- CLEAN ANSWER ---")
 
     if cfg.clean_answer is True:
-        docs = state.get("documents", [])
-        ctx_str = render_context(docs)  # your existing renderer
         raw_answer = state["generation"]
 
-        cleaned = cleaner_chain.invoke({"context": ctx_str, "answer": raw_answer})
+        if not _META_PATTERNS.search(raw_answer):
+            logger.debug("Clean answer skipped (no meta-commentary detected).")
+            return state
+
+        cleaned = cleaner_chain.invoke({"answer": raw_answer})
 
         logger.info(f"Cleaned Generated answer (EN): {cleaned}")
 

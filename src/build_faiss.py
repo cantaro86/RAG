@@ -5,7 +5,6 @@
 
 import os
 import re
-import unicodedata
 from pathlib import Path
 
 import faiss
@@ -18,15 +17,9 @@ from langdetect import detect
 from src._load_env import DEVICE, ONLINE, Config, cfg, console
 from src.loggers import Logger
 from src.translate import translate_docs_it_to_en
+from src.utils import _normalize
 
 logger = Logger.get_logger(__name__)
-
-
-def _normalize(text: str) -> str:
-    """Lowercase, strip accents and punctuation for robust section matching."""
-    text = text.lower().strip()
-    text = unicodedata.normalize("NFKD", text)
-    return re.sub(r"[^a-z0-9 ]", "", text)
 
 
 SKIP_SECTIONS = {"references", "riferimenti", "bibliografia"}
