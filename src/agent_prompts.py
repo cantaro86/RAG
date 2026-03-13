@@ -134,12 +134,44 @@ Instructions:
    - Implicit contrasts and negations: "what if not", "what if I don't", "instead",
      "what about", "and if", "how about", "rather than"
    - Implicit topic continuations: "what else", "anything else", "what about the other"
+   - Ambiguous named entities: table numbers, section names, summary numbers, or any label,
+    always qualify them with the corpus and context mentioned in history.
 2. The history may span multiple turns — scan ALL of it to identify the relevant medical
    procedure, condition, and context, not just the most recent exchange.
 3. If the question introduces a completely new topic unrelated to history, return it unchanged.
 4. Do not answer the question or add new medical information.
 5. Output ONLY the rewritten question, no introductions, explanations, lists, or multiple options.
 
+""",
+        ),
+        (
+            "user",
+            """
+            Question: {question}
+
+            Conversation history: {history}
+            """,
+        ),
+    ]
+)
+
+
+prompt_transform_query = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """ You are a query rewriter for a medical information retrieval system.
+
+Task: The question below failed to retrieve relevant documents.
+Rephrase it to improve retrieval, without changing its meaning.
+
+Instructions:
+1. The question is already self-contained — do NOT add history context.
+2. Expand or vary medical terminology: use synonyms, related clinical terms,
+   or alternative phrasings that might match document language better.
+3. If the question is composite, focus on its most specific retrievable aspect.
+4. Do not answer the question or add new medical information.
+5. Output ONLY the rewritten question.
 """,
         ),
         (

@@ -21,7 +21,8 @@ class RAGContext:
     retriever: object
     rag_chain: object
     cleaner_chain: object
-    question_rewriter: object
+    initial_question_rewriter: object
+    question_transformer: object
 
     def __post_init__(self):
         """Ensure all required dependencies are provided."""
@@ -91,6 +92,21 @@ def topic_detector(state, topic_continuity_classifier):
 
     # topic is either "SAME" or "NEW"
     return {**state, "topic_status": topic}
+
+
+def pre_retrieval_rewriter(state, initial_question_rewriter):
+    """
+    Resolve ambiguous references in the question before retrieval.
+    Runs on followup turns only, using history to make the question self-contained.
+    """
+    logger.debug("---PRE-RETRIEVAL REWRITER---")
+    question = state["question"]
+    hist = format_history(state.get("history", []))
+
+    rewritten = initial_question_rewriter.invoke({"question": question, "history": hist})
+    logger.debug(f"Pre-retrieval rewritten question: {rewritten}")
+
+    return {**state, "question": rewritten}
 
 
 def retrieve_and_filter(state, retriever):
@@ -192,7 +208,7 @@ def clean_answer(state, cleaner_chain):
     return state
 
 
-def transform_query(state, question_rewriter):
+def transform_query(state, question_transformer):
     """
     Transform the query to produce a better question.
 
@@ -208,7 +224,7 @@ def transform_query(state, question_rewriter):
     hist = format_history(state.get("history", []))
 
     # Re-write question
-    better_question = question_rewriter.invoke({"question": question, "history": hist})
+    better_question = question_transformer.invoke({"question": question, "history": hist})
     logger.debug(f"⚠️ Counter {state['rewrite_count']}. Transformed question: {better_question}")
     return {**state, "question": better_question}
 
@@ -295,10 +311,15 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("clean_answer", partial(clean_answer, cleaner_chain=ctx.cleaner_chain))
 
-    workflow.add_node("transform_query", partial(transform_query, question_rewriter=ctx.question_rewriter))
+    workflow.add_node("transform_query", partial(transform_query, question_transformer=ctx.question_transformer))
 
     workflow.add_node(
         "topic_detector", partial(topic_detector, topic_continuity_classifier=ctx.topic_continuity_classifier)
+    )
+
+    workflow.add_node(
+        "pre_retrieval_rewriter",
+        partial(pre_retrieval_rewriter, initial_question_rewriter=ctx.initial_question_rewriter),
     )
 
     workflow.add_node("clear_history", clear_history)
@@ -324,7 +345,7 @@ def build_agent_graph(ctx: RAGContext):
         "topic_detector",
         route_on_topic,
         {
-            "same": "retrieve_and_filter",
+            "same": "pre_retrieval_rewriter",
             "new": "clear_history",
         },
     )
@@ -338,6 +359,8 @@ def build_agent_graph(ctx: RAGContext):
             "end": "no_generation",
         },
     )
+
+    workflow.add_edge("pre_retrieval_rewriter", "retrieve_and_filter")
 
     workflow.add_edge("no_generation", END)
 

@@ -2,7 +2,13 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
 from src._load_env import Config
-from src.agent_prompts import prompt_clean_chat, prompt_rag, prompt_rewrite_medical, prompt_topic
+from src.agent_prompts import (
+    prompt_clean_chat,
+    prompt_rag,
+    prompt_rewrite_medical,
+    prompt_topic,
+    prompt_transform_query,
+)
 from src.build_faiss import load_vectorstore
 from src.graph import RAGContext, build_agent_graph
 from src.llm_build import build_llm_pipe
@@ -56,14 +62,16 @@ def build_rag_agent(cfg: Config):
     topic_continuity_classifier = prompt_topic | llm_topic | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()
     cleaner_chain = prompt_clean_chat | llm_messages | StrOutputParser()
-    question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
+    initial_question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
+    question_transformer = prompt_transform_query | llm_rewriter | StrOutputParser()
 
     ctx = RAGContext(
         topic_continuity_classifier=topic_continuity_classifier,
         retriever=retriever,
         rag_chain=rag_chain,
         cleaner_chain=cleaner_chain,
-        question_rewriter=question_rewriter,
+        initial_question_rewriter=initial_question_rewriter,
+        question_transformer=question_transformer,
     )
 
     return build_agent_graph(ctx)
