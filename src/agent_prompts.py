@@ -54,27 +54,29 @@ prompt_rag = ChatPromptTemplate.from_messages(
 
 Hard rules:
 1. Use ONLY the Sources below to generate your Answer.
-2. The Conversation history helps you understand the Question context, but DO NOT copy answers from history.
-3. LOGICAL CONSISTENCY: Verify that the condition described in the Sources matches the user's condition exactly.
+2. LOGICAL CONSISTENCY: Verify that the condition described in the Sources matches the user's
+   condition exactly.
    - Do not provide instructions for a condition the user has explicitly denied having.
-4. If the Sources mention the correct protocol (e.g., a table or section) but do not contain its details,
-   simply reference that item by name and Corpus. Do not substitute details from a different protocol.
-5. If Sources do not contain the answer, output EXACTLY:
+3. For tables and sections:
+   - If the Sources include the actual content of a table or section, use that content fully
+     in your answer.
+   - If the Sources only mention a table or section by name without including its rows or
+     details, reference it by name and Corpus only. DO NOT invent or substitute its contents.
+4. If NO source contains ANY part of the answer, output EXACTLY:
    "The Information for patients and the colonoscopy literature do not contain the information."
-6. Do not refer to generic "sources" or "documents". Always specify the source by name using the "Corpus" field.
+   DO NOT add disclaimers about individual sources that did not contribute to the answer.
+   If a source is not relevant to the question, simply ignore it — do not mention its absence.
+5. Do not refer to generic "sources" or "documents". Always specify the source by name using
+   the "Corpus" field.
 """,
         ),
         (
             "user",
-            """
-Current question:
+            """Current question:
 {question}
 
 Sources:
 {context}
-
-Conversation history:
-{history}
 
 Answer:""",
         ),
@@ -127,13 +129,17 @@ Task: Given a Question and a Conversation history,
 rewrite the question as a **standalone question** that can be understood without the conversation history.
 
 Instructions:
-1. If the question references the previous topic (uses pronouns, implicit context), incorporate the relevant entities
-and context from the history to make it self-contained
-2. If the question introduces a new topic unrelated to history, return it unchanged
-3. Replace pronouns ("it", "this", "their", "they") with the actual entities from history
-4. **Keep the question concise and focused**
-5. Do not answer the question or add new medical information
-6. Output ONLY the rewritten question, no introductions, explanations, lists, or multiple options.
+1. Replace ALL implicit references with explicit entities from history:
+   - Pronouns: "it", "this", "that", "these", "those", "they", "them", "their"
+   - Implicit contrasts and negations: "what if not", "what if I don't", "instead",
+     "what about", "and if", "how about", "rather than"
+   - Implicit topic continuations: "what else", "anything else", "what about the other"
+2. The history may span multiple turns — scan ALL of it to identify the relevant medical
+   procedure, condition, and context, not just the most recent exchange.
+3. If the question introduces a completely new topic unrelated to history, return it unchanged.
+4. Do not answer the question or add new medical information.
+5. Output ONLY the rewritten question, no introductions, explanations, lists, or multiple options.
+
 """,
         ),
         (

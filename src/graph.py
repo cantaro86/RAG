@@ -151,9 +151,8 @@ def generate_with_docs(state, rag_chain):
     q = state["question"]
     docs = state.get("documents", [])
     rendered_docs = render_context(docs)
-    hist = format_history(state.get("history", []))
 
-    answer = rag_chain.invoke({"history": hist, "context": rendered_docs, "question": q})
+    answer = rag_chain.invoke({"context": rendered_docs, "question": q})
     logger.info(f"Raw Generated answer (EN): {answer}")
 
     msgs = push_memory(state, q, answer)
