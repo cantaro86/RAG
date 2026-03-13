@@ -1,6 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass, fields
+from functools import partial
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
@@ -113,10 +114,9 @@ def retrieve_and_filter(state, retriever):
         #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
         #     )
         sources_table = print_sources(relevant_docs)
-
-    logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
-    # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
-    logger.debug(f"Top sources:\n{sources_table}")
+        logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
+        # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
+        logger.debug(f"Top sources:\n{sources_table}")
 
     if relevant_docs:
         logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
@@ -227,8 +227,8 @@ def clear_history(state: GraphState) -> dict:
     }
 
 
-def generate_no_docs(state: GraphState) -> dict:
-    logger.debug("---GENERATE NO DOCS---")
+def no_generation(state: GraphState) -> dict:
+    logger.debug("--- NO GENERATION NO DOCS---")
     msg = "I couldn't find relevant information. Please rephrase your question or add details."
     return {**state, "generation": msg, "has_docs": False}
 
@@ -290,19 +290,21 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("init_first_question", init_first_question)
 
-    workflow.add_node("retrieve_and_filter", lambda state: retrieve_and_filter(state, ctx.retriever))
+    workflow.add_node("retrieve_and_filter", partial(retrieve_and_filter, retriever=ctx.retriever))
 
-    workflow.add_node("generate_with_docs", lambda state: generate_with_docs(state, ctx.rag_chain))
+    workflow.add_node("generate_with_docs", partial(generate_with_docs, rag_chain=ctx.rag_chain))
 
-    workflow.add_node("clean_answer", lambda state: clean_answer(state, ctx.cleaner_chain))
+    workflow.add_node("clean_answer", partial(clean_answer, cleaner_chain=ctx.cleaner_chain))
 
-    workflow.add_node("transform_query", lambda state: transform_query(state, ctx.question_rewriter))
+    workflow.add_node("transform_query", partial(transform_query, question_rewriter=ctx.question_rewriter))
 
-    workflow.add_node("topic_detector", lambda state: topic_detector(state, ctx.topic_continuity_classifier))
+    workflow.add_node(
+        "topic_detector", partial(topic_detector, topic_continuity_classifier=ctx.topic_continuity_classifier)
+    )
 
     workflow.add_node("clear_history", clear_history)
 
-    workflow.add_node("generate_no_docs", generate_no_docs)
+    workflow.add_node("no_generation", no_generation)
 
     workflow.add_edge(START, "init_first_question")
 
@@ -334,11 +336,11 @@ def build_agent_graph(ctx: RAGContext):
         {
             "transform_query": "transform_query",
             "generate_with_docs": "generate_with_docs",
-            "end": "generate_no_docs",
+            "end": "no_generation",
         },
     )
 
-    workflow.add_edge("generate_no_docs", END)
+    workflow.add_edge("no_generation", END)
 
     workflow.add_edge("transform_query", "retrieve_and_filter")
 

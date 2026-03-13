@@ -24,6 +24,16 @@ def interactive_loop(cfg: Config):
     """Interactive loop with the agent"""
     agent = build_rag_agent(cfg)
 
+    #############################################################################
+    # from langchain_core.runnables.graph import MermaidDrawMethod
+    # img = agent.get_graph().draw_mermaid_png(
+    #         draw_method=MermaidDrawMethod.API,
+    #     )
+    # with open("graph.png", "wb") as f:
+    #     f.write(img)
+    # console.print("GRAPH IMAGE SAVED")
+    ##############################################################################
+
     console.print("[bold green]RAG Agent. Type 'esci', 'exit', 'quit' or 'q' to quit.[/bold green]")
     console.print("[yellow]The agent will decide when to search documents and when to respond directly.[/yellow]")
 
