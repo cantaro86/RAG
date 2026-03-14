@@ -7,10 +7,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from src._load_env import cfg
-from src.bilingual_question import BilingualQuestion
 from src.loggers import Logger
 from src.state import GraphState
-from src.utils import print_sources, render_context
+from src.utils import extract_source_filter, print_sources, render_context
 
 logger = Logger.get_logger(__name__)
 
@@ -114,9 +113,10 @@ def retrieve_and_filter(state, retriever):
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
 
-    # Retrieve from both languages if needed
-    q = BilingualQuestion(question)
-    docs_en = retriever.invoke(q.en)
+    source_filter = extract_source_filter(question) if rewrite_count == 0 else None
+    logger.debug(f"Source filter: {source_filter}")
+
+    docs_en = retriever.invoke(question, filter=source_filter)
 
     relevant_docs = [d for d in docs_en if float(d.metadata.get("rerank_score", 0)) > cfg.threshold]
 

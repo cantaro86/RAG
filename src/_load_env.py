@@ -1,12 +1,15 @@
+import logging
 import os
 import socket
-import warnings
 from pathlib import Path
 
 import numpy as np
 import torch
 import yaml
 from rich.console import Console
+
+logging.getLogger("transformers.pipelines.base").setLevel(logging.ERROR)
+# logging.getLogger("transformers").setLevel(logging.ERROR)
 
 # Patch numpy.array for fasttext NumPy 2.x compatibility
 _original_array = np.array
@@ -20,15 +23,6 @@ def patched_array(*args, **kwargs):
 
 
 np.array = patched_array
-
-
-warnings.filterwarnings(
-    "ignore",
-    message=(
-        r"You seem to be using the pipelines sequentially on GPU\."
-        r" In order to maximize efficiency please use a dataset"
-    ),
-)
 
 
 def is_online_fast() -> bool:

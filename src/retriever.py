@@ -1,7 +1,11 @@
-from langchain_classic.retrievers import ContextualCompressionRetriever
+import re
+
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders.base import BaseCrossEncoder
 from langchain_community.vectorstores import FAISS
+from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
+from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from sentence_transformers import CrossEncoder
 
@@ -9,6 +13,9 @@ from src._load_env import DEVICE
 from src.loggers import Logger
 
 logger = Logger.get_logger(__name__)
+
+
+_TABLE_RE = re.compile(r"\btable\s+(\d+)\b", flags=re.IGNORECASE)
 
 
 # ------------------------
@@ -48,6 +55,124 @@ class ScoredCrossEncoderReranker(CrossEncoderReranker):
 # ------------------------
 # Retriever
 # ------------------------
+class FilterableRerankerRetriever(BaseRetriever):
+    """
+    A retriever that wraps FAISS + cross-encoder reranker and supports
+    an optional metadata filter dict passed at invoke time.
+    """
+
+    vs: FAISS
+    k: int
+    compressor: ScoredCrossEncoderReranker
+    search_type: str = "similarity"
+    fetch_k: int = 80
+    lambda_mult: float = 0.3
+
+    class Config:
+        arbitrary_types_allowed = True
+
+    def _matches_filter(self, metadata, source_filter: dict | None) -> bool:
+        if not source_filter:
+            return True
+
+        for key, value in source_filter.items():
+            actual = metadata.get(key, "")
+
+            if isinstance(value, dict):
+                if "$ne" in value and actual == value["$ne"]:
+                    return False
+            else:
+                if actual != value:
+                    return False
+
+        return True
+
+    def _build_faiss_filter(self, source_filter: dict):
+        return lambda metadata: self._matches_filter(metadata, source_filter)
+
+    def _extract_table_ref(self, query: str) -> str | None:
+        m = _TABLE_RE.search(query)
+        if not m:
+            return None
+        return f"table {m.group(1)}".lower()
+
+    def _find_table_docs(self, query: str, source_filter: dict | None) -> list[Document]:
+        table_ref = self._extract_table_ref(query)
+        if not table_ref or not source_filter:
+            return []
+
+        store = getattr(self.vs.docstore, "_dict", {})
+        matches = []
+
+        for doc in store.values():
+            md = doc.metadata or {}
+
+            if not self._matches_filter(md, source_filter):
+                continue
+
+            if md.get("type") != "table":
+                continue
+
+            section = str(md.get("section", "")).lower()
+            content = str(doc.page_content).lower()
+
+            if table_ref in section or table_ref in content:
+                matches.append(doc)
+
+        return matches
+
+    def _get_relevant_documents(
+        self,
+        query: str,
+        *,
+        run_manager: CallbackManagerForRetrieverRun = None,
+        **kwargs,
+    ) -> list[Document]:
+        source_filter = kwargs.get("filter")
+
+        logger.debug(
+            f"[Retriever] query={query!r} search_type={self.search_type} "
+            f"k={self.k} fetch_k={self.fetch_k} source_filter={source_filter}"
+        )
+
+        # 1) Deterministic branch for explicit "Table N" queries inside a known corpus
+        table_docs = self._find_table_docs(query, source_filter)
+        logger.debug(f"[Retriever] deterministic table lookup found {len(table_docs)} docs")
+
+        if table_docs:
+            reranked = self.compressor.compress_documents(table_docs, query)
+            logger.debug(f"[Retriever] Reranker returned {len(reranked)} docs from table lookup")
+            return reranked
+
+        # 2) Fallback to normal FAISS retrieval
+        search_kwargs = {"k": self.k}
+
+        if source_filter:
+            needs_callable = any(isinstance(v, dict) for v in source_filter.values())
+            search_kwargs["filter"] = self._build_faiss_filter(source_filter) if needs_callable else source_filter
+            search_kwargs["fetch_k"] = max(self.fetch_k, self.k)
+
+        logger.debug(f"[Retriever] FAISS fallback search_kwargs={search_kwargs}")
+
+        if self.search_type == "mmr":
+            search_kwargs.update(
+                {
+                    "fetch_k": self.fetch_k,
+                    "lambda_mult": self.lambda_mult,
+                }
+            )
+            docs = self.vs.max_marginal_relevance_search(query, **search_kwargs)
+        else:
+            docs = self.vs.similarity_search(query, **search_kwargs)
+
+        logger.debug(f"[Retriever] FAISS returned {len(docs)} docs before reranking")
+
+        reranked = self.compressor.compress_documents(docs, query)
+
+        logger.debug(f"[Retriever] Reranker returned {len(reranked)} docs")
+        return reranked
+
+
 def build_retriever(
     vs: FAISS,
     k: int,
@@ -58,9 +183,22 @@ def build_retriever(
     search_type: str = "similarity",
     fetch_k: int | None = None,
     lambda_mult: float = 0.3,
-) -> ContextualCompressionRetriever | VectorStoreRetriever:
+) -> FilterableRerankerRetriever | VectorStoreRetriever:
+    if rerank_model:
+        cross_encoder = MPSSentenceCrossEncoder(rerank_model)
+        compressor = ScoredCrossEncoderReranker(model=cross_encoder, top_n=k_reranked, score_key=score_key)
+        return FilterableRerankerRetriever(
+            vs=vs,
+            k=k,
+            compressor=compressor,
+            search_type=search_type,
+            fetch_k=fetch_k or max(4 * k, 80),
+            lambda_mult=lambda_mult,
+        )
+
+    # Fallback: no reranker, plain FAISS retriever
     if search_type == "mmr":
-        base_retriever = vs.as_retriever(
+        return vs.as_retriever(
             search_type="mmr",
             search_kwargs={
                 "k": k,
@@ -68,13 +206,4 @@ def build_retriever(
                 "lambda_mult": lambda_mult,
             },
         )
-    else:
-        base_retriever = vs.as_retriever(search_kwargs={"k": k})
-
-    if rerank_model:
-        cross_encoder = MPSSentenceCrossEncoder(rerank_model)
-        compressor = ScoredCrossEncoderReranker(model=cross_encoder, top_n=k_reranked, score_key=score_key)
-        retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=base_retriever)
-        return retriever
-
-    return retriever if rerank_model else base_retriever
+    return vs.as_retriever(search_kwargs={"k": k})

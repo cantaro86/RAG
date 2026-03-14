@@ -14,6 +14,20 @@ logger = Logger.get_logger(__name__)
 PATIENT_DOC = "Informazioni_per_pazienti.md"
 
 
+_CORPUS_FILTERS = {
+    "information for patients": {"source": PATIENT_DOC},
+    "colonoscopy literature": {"source": {"$ne": PATIENT_DOC}},
+}
+
+
+def extract_source_filter(question: str) -> dict | None:
+    q_lower = question.lower()
+    for label, filt in _CORPUS_FILTERS.items():
+        if label in q_lower:
+            return filt
+    return None
+
+
 def print_sources(docs: list[Document]) -> str:
     """
     Create a formatted table of source documents and return it as plain text.
