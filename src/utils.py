@@ -13,17 +13,32 @@ logger = Logger.get_logger(__name__)
 
 PATIENT_DOC = "Informazioni_per_pazienti.md"
 
-
-_CORPUS_FILTERS = {
-    "information for patients": {"source": PATIENT_DOC},
-    "colonoscopy literature": {"source": {"$ne": PATIENT_DOC}},
-}
+_CORPUS_FILTER_PATTERNS = [
+    (
+        re.compile(
+            r"information[\s_]*for[\s_]*patients?|"
+            r"patient[\s_]*information|"
+            r"informazioni[\s_]*per[\s_]*pazienti|"
+            r"informazioni_per_pazienti",
+            re.IGNORECASE,
+        ),
+        {"source": PATIENT_DOC},
+    ),
+    (
+        re.compile(
+            r"colonoscopy[\s_]*literature|"
+            r"canadian[\s_]*guidelines|"
+            r"linee[\s_]*guida",
+            re.IGNORECASE,
+        ),
+        {"source": {"$ne": PATIENT_DOC}},
+    ),
+]
 
 
 def extract_source_filter(question: str) -> dict | None:
-    q_lower = question.lower()
-    for label, filt in _CORPUS_FILTERS.items():
-        if label in q_lower:
+    for pattern, filt in _CORPUS_FILTER_PATTERNS:
+        if pattern.search(question):
             return filt
     return None
 
