@@ -42,10 +42,17 @@ def interactive_loop(cfg: Config):
     while True:
         try:
             print("\nYou: ", end="", flush=True)
-            question = sys.stdin.buffer.readline().decode("utf-8", errors="replace").strip()
-        except (EOFError, KeyboardInterrupt):
+            raw = sys.stdin.buffer.readline()
+            if not raw:
+                logger.info("EOF reached, exiting interactive loop")
+                print()
+                break
+            question = raw.decode("utf-8", errors="replace").strip()
+        except KeyboardInterrupt:
+            logger.info("KeyboardInterrupt received, exiting interactive loop")
             print()
             break
+
         if question.strip().lower() in {"exit", "quit", "q", "esci"}:
             logger.info("User exited the program session id=%s", thread_id)
             break
