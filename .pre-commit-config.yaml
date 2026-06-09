@@ -30,6 +30,7 @@ repos:
     rev: v2.4.1
     hooks:
       - id: codespell
+        exclude: '^Markdown_IT/.*'
         args: ["-x", ".codespellignorelines"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

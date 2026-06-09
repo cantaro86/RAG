@@ -15,6 +15,7 @@ jupyter.sbatch
 Colon-TC
 Colon-TC_*
 Markdown
+Markdown_temp
 Output
 docs
 faiss_index
