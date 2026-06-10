@@ -4,14 +4,12 @@ import traceback
 
 import src._load_env as _  # noqa: F401  # isort: skip
 from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
-
+from rich.markup import escape
 
 from src.agent_factory import build_rag_agent
-from src.bilingual_question import BilingualQuestion
 from src.build_faiss import build_faiss_index
-from src.build_markdown import create_markdown_from_pdf, find_missing_markdown
+from src.detect_language import DetectLanguage
 from src.loggers import Logger
-from src.translate import init_translators
 from src.ui_gradio import launch_gradio
 
 logger = Logger.get_logger(__name__)
@@ -58,16 +56,16 @@ def interactive_loop(cfg: Config):
             break
 
         try:
-            quest = BilingualQuestion(question)
+            quest = DetectLanguage(question)
             logger.info(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
             logger.error(f"Error processing question: {e}")
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[red]Error: {escape(str(e))}[/red]")
             continue
 
         # Invoke agent
         config = {"configurable": {"thread_id": thread_id}}
-        agent_input = {"question": quest.en}
+        agent_input = {"question": quest.text}
 
         last_output = None
         try:
@@ -79,19 +77,13 @@ def interactive_loop(cfg: Config):
 
             # Final generation
             if last_output and isinstance(last_output, dict) and "generation" in last_output:
-                if quest.lang == "it":
-                    # Translate answer back to Italian
-                    answer_it = quest.translate_to_italian(last_output["generation"])
-                    console.print(answer_it)
-                    logger.info(f"Final answer (IT): {answer_it}")
-                else:
-                    console.print(last_output["generation"])
+                console.print(last_output["generation"])
             else:
                 console.print("[yellow]No generation returned from agent.[/yellow]")
 
         except Exception as e:
             logger.error(f"Error during agent execution: {e}")
-            console.print(f"[red]Error: {e}[/red]")
+            console.print(f"[red]Error: {escape(str(e))}[/red]")
             raise e
 
 
@@ -108,30 +100,11 @@ def main():
 
     logger.debug(f"Configuration: {cfg.__dict__}")
 
-    try:
-        logger.info("Warming up translators...")
-        init_translators()
-        logger.info("Translators ready.")
-    except Exception as e:
-        logger.error(f"Failed to initialize translators: {e}")
-        console.print("[red]Failed to initialize translators. Check configuration or models.[/red]")
-        return
-
-    # Check if markdown files exist, if not create them from PDFs
-    if not os.path.isdir(cfg.md_dir) or not os.listdir(cfg.md_dir) or cfg.reindex:
-        console.print(f"[yellow]Markdown files not found in {cfg.md_dir}. Creating from PDFs...[/yellow]")
-        logger.info(f"Markdown files not found in {cfg.md_dir}. Creating from PDFs...")
-        create_markdown_from_pdf(cfg.pdf_dir, cfg.md_dir)
-
-    missing_files = find_missing_markdown(cfg.pdf_dir, cfg.md_dir)
-    if missing_files:
-        console.print(
-            f"[red]Warning: The following PDF files do not have corresponding markdown files in {cfg.md_dir}:[/red]"
-        )
-        logger.warning(f"Missing markdown files for PDFs: {[file.name for file in missing_files]}")
-        create_markdown_from_pdf(cfg.pdf_dir, cfg.md_dir, files=[file.name for file in missing_files])
-    else:
-        logger.info("All PDFs have corresponding markdown files.")
+    # Check if markdown files exist
+    if not os.path.isdir(cfg.md_dir) or not os.listdir(cfg.md_dir):
+        console.print(f"[yellow]Markdown files not found in {cfg.md_dir}. [/yellow]")
+        logger.error(f"Markdown files not found in {cfg.md_dir}.")
+        raise FileNotFoundError(f"Markdown files not found in {cfg.md_dir}.")
 
     # Rebuild FAISS index if requested
     if getattr(cfg, "reindex", False):

@@ -6,7 +6,6 @@ import fasttext
 from langdetect import detect_langs
 
 from src.loggers import Logger
-from src.translate import translate_text
 
 logger = Logger.get_logger(__name__)
 
@@ -34,7 +33,7 @@ logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
 # -------------------------
 
 
-class BilingualQuestion:
+class DetectLanguage:
     FASTTEXT_CONFIDENCE_THRESHOLD = 0.2
 
     MED_PREFIX = "[medical context] "
@@ -61,50 +60,12 @@ class BilingualQuestion:
         "stai",
     }
 
-    ENGLISH_WORDS = {
-        "hi",
-        "hello",
-        "thanks",
-        "bye",
-        "goodbye",
-        "the",
-        "is",
-        "are",
-        "thank",
-        "you",
-        "how",
-        "what",
-        "where",
-        "when",
-        "who",
-        "why",
-    }
-
     def __init__(self, text: str):
         self.text = text.strip()
         self.lang = self._detect_language(self.text)
 
-        if self.lang not in ("it", "en"):
-            raise ValueError(f"Unsupported language '{self.lang}'. Only 'it' and 'en' are supported.")
-
-        # Translate
-        if self.lang == "it":
-            self.it = self.text
-            hinted = self.MED_PREFIX + self.text.lstrip()
-            en = translate_text(hinted, src_lang="it", tgt_lang="en")
-            if en.lower().startswith(self.MED_PREFIX.lower()):
-                en = en[len(self.MED_PREFIX) :].lstrip()
-            self.en = en
-        else:
-            self.en = self.text
-            self.it = ""
-
-    def translate_to_italian(self, text: str) -> str:
-        """Assume the input is in English"""
-        if not text:
-            return ""
-        text_it = translate_text(text.strip(), src_lang="en", tgt_lang="it", preserve_formatting=True)
-        return text_it
+        if self.lang not in ("it"):
+            raise ValueError(f"Unsupported language '{self.lang}'. Only italian is supported.")
 
     # -------------------------
     # 🔍 Detection Methods
@@ -123,8 +84,6 @@ class BilingualQuestion:
         clean_text = "".join(c for c in text.lower() if c not in string.punctuation)
         if any(c in text.lower() for c in ["è", "é", "ò", "à", "ì", "ù"]) or clean_text in self.ITALIAN_WORLDS:
             return "it"
-        if clean_text in self.ENGLISH_WORDS:
-            return "en"
 
     def _detect_fasttext(self, text: str) -> str:
         """Use fastText for reliable detection, even on short text."""
@@ -132,7 +91,7 @@ class BilingualQuestion:
         logger.debug("fastText detection")
 
         if not text.strip():
-            return "en"
+            return "it"
 
         # Quick heuristic for short text
         if len(text.split()) < 2:
@@ -177,15 +136,13 @@ class BilingualQuestion:
         t = text.lower()
         if any(w in t for w in self.ITALIAN_WORLDS):
             return "it"
-        if any(w in t for w in self.ENGLISH_WORDS):
-            return "en"
-        return "en"  # Default to English if uncertain
+        return "unknown"  # Default to unknown
 
     def __repr__(self):
-        return f"BilingualQuestion(it={self.it!r}, en={self.en!r})"
+        return f"DetectLanguage(it={self.text!r})"
 
     def get(self, lang: str) -> str:
         """Return the question in the requested language."""
-        if lang not in ("it", "en"):
-            raise ValueError("Language must be 'it' or 'en'.")
+        if lang not in ("it"):
+            raise ValueError("Language must be italian.")
         return getattr(self, lang)

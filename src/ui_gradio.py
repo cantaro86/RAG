@@ -4,7 +4,7 @@ import gradio as gr
 
 from src._load_env import Config, attach_debugger_if_requested
 from src.agent_factory import build_rag_agent
-from src.bilingual_question import BilingualQuestion
+from src.detect_language import DetectLanguage
 from src.loggers import Logger
 
 logger = Logger.get_logger(__name__)
@@ -20,7 +20,7 @@ def launch_gradio(cfg: Config):
             thread_id = str(uuid.uuid4())
 
         try:
-            quest = BilingualQuestion(message)
+            quest = DetectLanguage(message)
             logger.debug(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
             logger.error(f"Error processing question: {e}")
@@ -36,10 +36,6 @@ def launch_gradio(cfg: Config):
 
         if last_output and isinstance(last_output, dict) and "generation" in last_output:
             answer = last_output["generation"]
-            if quest.lang == "it":
-                answer_it = quest.translate_to_italian(answer)
-                logger.info(f"Final answer (IT): {answer_it}")
-                return answer_it, thread_id
             return answer, thread_id
 
         return "No generation returned from agent.", thread_id

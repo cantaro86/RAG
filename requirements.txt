@@ -1,7 +1,6 @@
 accelerate
 bitsandbytes
 debugpy
-deepl
 faiss-cpu
 fasttext
 gradio

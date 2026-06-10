@@ -16,7 +16,6 @@ from langdetect import detect
 
 from src._load_env import DEVICE, ONLINE, Config, cfg, console
 from src.loggers import Logger
-from src.translate import translate_docs_it_to_en
 from src.utils import _normalize
 
 logger = Logger.get_logger(__name__)
@@ -412,17 +411,6 @@ def build_faiss_index(cfg: Config) -> None:
 
     console.print(f"Loaded [bold]{len(md_files)}[/bold] files -> [bold]{len(chunks)}[/bold] chunks.")
     logger.info("Loaded %d files -> %d chunks.", len(md_files), len(chunks))
-
-    it_chunks = [c for c in chunks if c.metadata.get("language") == "it"]
-    logger.info("Found %d Italian chunks to translate.", len(it_chunks))
-
-    en_or_other_chunks = [c for c in chunks if c.metadata.get("language") != "it"]
-
-    if it_chunks and cfg.translate_pdf:
-        en_chunks = translate_docs_it_to_en(
-            it_chunks, src_lang="it", tgt_lang="en", parallel=cfg.translate_parallel, max_workers=cfg.translate_workers
-        )
-        chunks = en_chunks + en_or_other_chunks
 
     embedder = build_embedder(cfg.embed_model)
     vs = FAISS.from_documents(chunks, embedder)
