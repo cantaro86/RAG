@@ -30,6 +30,8 @@ def interactive_loop(cfg: Config):
     # with open("graph.png", "wb") as f:
     #     f.write(img)
     # console.print("GRAPH IMAGE SAVED")
+
+    # print(agent.get_graph().draw_mermaid())
     ##############################################################################
 
     console.print("[bold green]RAG Agent. Type 'esci', 'exit', 'quit' or 'q' to quit.[/bold green]")
