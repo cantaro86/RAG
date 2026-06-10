@@ -44,3 +44,8 @@ export TESSDATA_PREFIX="$CONDA_PREFIX/share"
 
 
 pip install -r requirements.txt --no-cache
+
+
+
+OLD TRANSLATION VERSION
+check the branch inglese

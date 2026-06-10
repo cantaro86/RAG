@@ -80,9 +80,6 @@ Per misurare la coerenza interna delle valutazioni dei panelist per ciascuno sta
 
 **Tabella 2** Statements elaborati dai panelist nel secondo round Delphi, e discussi nel terzo e quarto round per raggiungere il massimo consenso e l'affidabilità interna di Cronbach. Gli statements con punteggio compreso tra 4 e 5 sono evidenziati per mostrare le situazioni in cui tutti i panelist erano d'accordo sullo statement ma il livello di sostegno differiva (cioè «parzialmente d'accordo» versus «fortemente d'accordo»).
 
-*[Le tabelle dati originali non sono riproducibili in questo formato.]*
-
-**Tabella 2 (continua)**
 
 Il coefficiente di affidabilità α di Cronbach varia normalmente tra 0 e 1. Quanto più il coefficiente α di Cronbach è vicino a 1,0, tanto maggiore è la coerenza interna dell'item. Un coefficiente α > 0,9 è stato considerato eccellente, α > 0,8 buono, α > 0,7 accettabile, α > 0,6 discutibile, α > 0,5 scarso e α < 0,5 inaccettabile. Per le iterazioni, un α di 0,8 è stato considerato un obiettivo ragionevole per l'affidabilità interna. Tutte le valutazioni dei panelist per ciascuno statement sono state inoltre analizzate con statistiche descrittive, stimando il punteggio medio, massimo e minimo, e la relativa deviazione standard.
 
@@ -98,11 +95,7 @@ Le categorie che comprendevano la più alta percentuale di statements che raggiu
 Un'affidabilità interna inferiore è stata raggiunta per gli statements riguardanti l'uso del tubo rettale, gli spasmolitici, il posizionamento in decubito e il numero di acquisizioni dei dati TC, la marcatura fecale, la lettura 2D vs. 3D e la refertazione. Tuttavia, nell'ultimo round, nessun panelist ha valutato i propri statements con un punteggio inferiore a 4 sulla scala di valutazione a 5 punti. Ciò indica che tutti i panelist erano d'accordo sullo statement ma il livello di sostegno differiva (cioè «parzialmente d'accordo» versus «fortemente d'accordo»).
 
 ## Discussione
-Il consenso completo è stato raggiunto dal nostro panel di esperti nell'82% degli statements. Nei restanti statements, il consenso completo
-
-*[Tabella dati non riproducibile in questo formato.]*
-
-non è stato raggiunto, ma tutti i panelist hanno raggiunto un «buon» livello di accordo. In totale, i panelist hanno completato quattro round; il primo e il secondo round sono serviti a elaborare gli statements di base. Il terzo e il quarto round hanno contenuto il nucleo della discussione e sono stati necessari per raggiungere il massimo consenso possibile, creando così un'opinione ottimizzata e omogenea per ciascuno statement.
+Il consenso completo è stato raggiunto dal nostro panel di esperti nell'82% degli statements. Nei restanti statements, il consenso completo non è stato raggiunto, ma tutti i panelist hanno raggiunto un «buon» livello di accordo. In totale, i panelist hanno completato quattro round; il primo e il secondo round sono serviti a elaborare gli statements di base. Il terzo e il quarto round hanno contenuto il nucleo della discussione e sono stati necessari per raggiungere il massimo consenso possibile, creando così un'opinione ottimizzata e omogenea per ciascuno statement.
 
 Tutti i panelist hanno mostrato un elevato livello di accordo sulla performance tecnica della CTC, con raccomandazioni chiare riguardo alla distensione del colon, ai parametri TC, all'uso di mezzi di contrasto endovenosi e alla preparazione del paziente. Un pieno accordo è stato raggiunto anche riguardo al ruolo del CAD e alla misurazione delle lesioni. Questi dati riflettono una generale omogeneità di approccio tra i membri del panel nonostante la loro ampia distribuzione geografica. Tutti i membri del panel sono tutor abituali del corso ESGAR sulla CTC, il che potrebbe averne aumentato il livello di accordo; vi è una tendenza a promuovere un messaggio comune durante le discussioni del panel che si svolgono nell'ambito dei corsi ESGAR sulla CTC [15, 16]. Inoltre, in queste aree la letteratura indicizzata è relativamente matura e stabile; ad esempio, i dati disponibili a sostegno dell'uso della CO2 automatizzata per un'ottimale distensione colica sono relativamente coerenti [17-20].
 

@@ -141,7 +141,6 @@ Abbiamo arruolato 1.446 pazienti consecutivi (età media 62,37 ± 14,1 anni; 42 
 
 Secondo lo score qualitativo, la qualità complessiva della preparazione intestinale è stata considerata adeguata in 1.349 pazienti (93,29 %). Nel dettaglio, una qualità adeguata della marcatura dei liquidi è stata raggiunta in 1.387 pazienti (95,92 %), una distensione adeguata del colon in 1.428 pazienti (98,75 %) e una valutazione completa del colon è stata ottenuta in 1.406 pazienti (97,2 %). Non sono state riscontrate differenze statistiche significative raggruppando la popolazione in base a sesso, età o presenza di diverticoli. I risultati sono riassunti nella Tabella 2.
 
-*(Nota di traduzione: nel documento originale la Tabella 2 «Score qualitativi» è risultata malformata e in larga parte illeggibile; se ne riporta di seguito una sintesi dei dati interpretabili. Lo score qualitativo complessivo confrontato per sesso, età e presenza di diverticoli non mostrava differenze statisticamente significative — valori di p indicativi: distensione del colon ≈ 0,32-0,34; marcatura dei liquidi ≈ 0,06-0,07; valutazione completa ≈ 0,64-0,07; sesso ≈ 0,93-0,96. Esempi di valori: diverticoli presenti — 596/617 [96,5 %] adeguati per la marcatura; età ≥ 65 — 651 [95,3 %] adeguati; età < 65 — 735 [96,45 %] adeguati; femmine — 806 [95,8 %] adeguate; maschi — 581 [96 %] adeguati.)*
 
 ### Score quantitativo
 
