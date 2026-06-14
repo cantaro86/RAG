@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import yaml
+from dotenv import load_dotenv
 from rich.console import Console
 
 logging.getLogger("transformers.pipelines.base").setLevel(logging.ERROR)
@@ -70,9 +71,16 @@ class Config:
 config_path = Path(__file__).resolve().parents[1] / "config.yaml"
 cfg = Config(str(config_path))
 
-# Set HF token if provided
-if getattr(cfg, "hf_token", None):
-    os.environ["HF_TOKEN"] = cfg.hf_token
+load_dotenv()
+
+if not os.environ.get("HF_TOKEN"):
+    console.print(
+        "[bold red]Warning:[/bold red] HuggingFace token not found in environment variables. "
+        "Set HF_TOKEN in your .env file to enable model downloads and updates."
+    )
+    if ONLINE:
+        raise ValueError("HuggingFace token is required for online mode. Please set HF_TOKEN in your .env file.")
+
 
 # Set HuggingFace cache dir
 if getattr(cfg, "hf_home", None):

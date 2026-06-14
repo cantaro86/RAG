@@ -2,6 +2,7 @@ __pycache__
 .gradio
 .byaldi
 .ruff_cache
+.env
 
 readme_ollama.md
 ollama.sif
