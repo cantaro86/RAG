@@ -179,11 +179,30 @@ def generate_with_docs(state, rag_chain):
 
 
 _META_PATTERNS = re.compile(
+    # English patterns (keep: LLM may still leak English)
     r"based on (the )?(provided |retrieved )?(sources?|context|documents?)|"
     r"according to (the )?sources?|"
     r"as (mentioned|stated) in (the )?(conversation history|retrieved documents?)|"
     r"the sources? indicate|"
-    r"\[(doc|source)?\s?\d+\]",
+    # Italian — "basato su" family
+    r"in base ai (documenti|contesto|fonti)( forniti| recuperati)?|"
+    r"sulla base dei (documenti|contesto|fonti)( forniti| recuperati)?|"
+    r"basandomi sui? (documenti|contesto|fonti)( forniti| recuperati)?|"
+    r"basandosi sui? (documenti|contesto|fonti)( forniti| recuperati)?|"
+    # Italian — "secondo" family
+    r"secondo (le )?(fonti|i documenti|il contesto)( forniti| recuperati)?|"
+    r"stando (alle )?(fonti|ai documenti)( forniti| recuperati)?|"
+    # Italian — "come indicato / riportato" family
+    r"come (indicato|riportato|menzionato|descritto) "
+    r"(nelle? |dai? )?(fonti?|documenti?|contesto)( forniti| recuperati)?|"
+    r"come (emerge|risulta) dai (documenti|fonti|testi)( forniti| recuperati)?|"
+    r"stando a quanto (indicato|riportato) (nei|dai|nelle) (documenti|fonti)|"
+    # Italian — "le fonti indicano / i documenti mostrano"
+    r"(le fonti|i documenti) (indicano|mostrano|riportano|suggeriscono|affermano)|"
+    r"dal (contesto|materiale) (fornito|recuperato|disponibile)|"
+    r"dai (documenti|testi|materiali) (forniti|recuperati|disponibili)|"
+    # Citation markers — [1], [doc1], [fonte 2], [sorgente3]
+    r"\[(doc|fonte|source|sorgente)?\s?\d+\]",
     flags=re.IGNORECASE,
 )
 
