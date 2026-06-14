@@ -89,7 +89,7 @@ def topic_detector(state, topic_continuity_classifier):
     logger.debug("--- TOPIC CONTINUITY CLASSIFIER---")
     logger.debug(f"Topic continuity evaluation: {topic}")
 
-    # topic is either "SAME" or "NEW"
+    # topic is either "STESSO" or "NUOVO"
     return {**state, "topic_status": topic}
 
 
@@ -281,10 +281,10 @@ def route_on_topic(state: GraphState) -> str:
     t = str(state.get("topic_status", "")).strip().upper()
     logger.debug(f"🚦 Extracted topic_status: '{t}' from state")
 
-    if t in ("SAME", "SAME_TOPIC", "SAMETOPIC"):
+    if t in ("SAME", "SAME_TOPIC", "STESSO"):
         logger.debug("🚦 → ROUTING 'same'")
         return "same"
-    if t in ("NEW", "NEW_TOPIC", "NEWTOPIC"):
+    if t in ("NEW", "NEW_TOPIC", "NUOVO"):
         logger.debug("🚦 → ROUTING 'new'")
         return "new"
 

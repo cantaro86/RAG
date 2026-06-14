@@ -79,7 +79,7 @@ def interactive_loop(cfg: Config):
 
             # Final generation
             if last_output and isinstance(last_output, dict) and "generation" in last_output:
-                console.print(last_output["generation"])
+                console.print(str(last_output["generation"]), markup=False)
             else:
                 console.print("[yellow]No generation returned from agent.[/yellow]")
 

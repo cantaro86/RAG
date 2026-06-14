@@ -19,5 +19,5 @@ class GraphState(TypedDict):
     history: list[dict]
     first_question: bool
     generation: NotRequired[str]
-    topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC"]]
+    topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC", "STESSO", "NUOVO"]]
     has_docs: NotRequired[bool]

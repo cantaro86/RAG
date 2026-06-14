@@ -1,4 +1,4 @@
 [codespell]
-skip = .git/*
+skip = .git/*,src/agent_prompts.py
 ignore-regex = @uniud.it
 ignore-words-list = coo
