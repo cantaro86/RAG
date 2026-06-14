@@ -20,18 +20,11 @@ _CORPUS_FILTER_PATTERNS = [
             r"patient[\s_]*information|"
             r"informazioni[\s_]*per[\s_]*pazienti|"
             r"informazioni_per_pazienti",
+            r"informativa[\s_]*per[\s_]*pazienti|"
+            r"informativa_per_pazienti",
             re.IGNORECASE,
         ),
         {"source": PATIENT_DOC},
-    ),
-    (
-        re.compile(
-            r"colonoscopy[\s_]*literature|"
-            r"canadian[\s_]*guidelines|"
-            r"linee[\s_]*guida",
-            re.IGNORECASE,
-        ),
-        {"source": {"$ne": PATIENT_DOC}},
     ),
 ]
 
@@ -81,10 +74,10 @@ def print_sources(docs: list[Document]) -> str:
 
 def doc_corpus_label(d: Document) -> str:
     src = os.path.basename(d.metadata.get("source", ""))
-    return "Information for patients" if src == PATIENT_DOC else "Colonoscopy literature"
+    return "Informazioni per i pazienti" if src == PATIENT_DOC else "Letteratura scientifica"
 
 
-_RECOMMENDATION_KEYS = {"recommendation", "recommendations", "main recommendation", "main recommendations"}
+_RECOMMENDATION_KEYS = {"raccomandazioni", "raccomandazioni principali"}
 
 
 def _normalize(text: str) -> str:
@@ -104,7 +97,7 @@ def render_context(docs: list[Document]) -> str:
     docs_sorted = sorted(
         docs,
         key=lambda d: (
-            doc_corpus_label(d) != "Information for patients",  # patient doc first
+            doc_corpus_label(d) != "Informazioni per i pazienti",  # patient doc first
             not is_recommendation(d),  # recommendations first
         ),
     )

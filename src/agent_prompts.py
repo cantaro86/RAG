@@ -60,14 +60,13 @@ Non fornire istruzioni per una condizione che l'utente ha esplicitamente negato 
 - Se le fonti includono il contenuto effettivo di una tabella o di una sezione,
 utilizzalo integralmente nella tua risposta.
 - Se le fonti menzionano una tabella o una sezione solo per nome, senza includerne righe o dettagli,
-citala solo per nome e corpus.
+citala se appartiene al corpus "Informazioni per i pazienti", altrimenti ignorala.
 NON inventare o sostituire il suo contenuto.
 4. Se NESSUNA fonte contiene ALCUNA parte della risposta, riporta ESATTAMENTE:
-"Le informazioni per i pazienti e la letteratura sulla colonscopia non contengono le informazioni richieste."
-NON aggiungere note di esclusione di responsabilità relative a singole fonti che non hanno contribuito alla risposta.
+"Le informazioni per i pazienti e la letteratura scientifica non contengono le informazioni richieste."
 Se una fonte non è pertinente alla domanda, ignorala semplicemente: non menzionarne l'assenza.
-5. Non fare riferimento a "fonti" o "documenti" generici. Specifica sempre la fonte per nome utilizzando
-il campo "Corpus".
+5. Non fare riferimento a "fonti" o "documenti" generici. Specifica sempre la fonte se il corpus
+è "Informazioni per i pazienti", altrimenti ignorala.
 """,
         ),
         (
@@ -134,7 +133,7 @@ Istruzioni:
 con i nomi specifici di condizioni, procedure o concetti menzionati nella cronologia.
 - Continuazioni di argomento implicite: "e poi?", "e se sì?", "e se no?", "c'è dell'altro?".
 - Entità nominate ambigue: numeri di tabella, nomi di sezione, nomi di medicine,
-qualificale sempre con il corpus e il contesto menzionati nella cronologia.
+qualificale sempre con il contesto menzionato nella cronologia.
 2. La cronologia può essere lunga: esaminatela TUTTA per identificare la procedura medica,
 la condizione e il contesto rilevanti.
 3. Se la domanda introduce un argomento completamente nuovo non correlato alla cronologia, non fare modifiche.
