@@ -6,6 +6,10 @@ from threading import RLock
 
 import pandas as pd
 
+from src.loggers import Logger
+
+logger = Logger.get_logger(__name__)
+
 _SPLIT_RE = re.compile(r"\s*[/,]\s*")
 _SPACE_RE = re.compile(r"\s+")
 
@@ -62,6 +66,7 @@ def merge_overlapping_groups(groups: list[list[str]]) -> list[list[str]]:
 
 
 def load_synonym_groups_from_excel(path: str | Path) -> tuple[tuple[str, ...], ...]:
+    logger.debug(f"Loading synonym groups from Excel: {path}")
     df = pd.read_excel(Path(path), header=1, names=["term", "synonyms"])
 
     raw_groups = []
@@ -71,6 +76,7 @@ def load_synonym_groups_from_excel(path: str | Path) -> tuple[tuple[str, ...], .
             raw_groups.append(group)
 
     merged = merge_overlapping_groups(raw_groups)
+    logger.debug(f"Loaded {len(merged)} synonym group(s) from {path}")
     return tuple(tuple(group) for group in merged)
 
 
@@ -125,6 +131,7 @@ class SynonymStore:
             self._groups = groups
             self._matchers = self._build_matchers(groups)
             self._mtime = mtime
+            logger.info(f"SynonymStore reloaded from {self.path} with {len(groups)} group(s)")
 
     def _get_groups_ref(self) -> tuple[tuple[str, ...], ...]:
         self.reload_if_needed()
@@ -156,14 +163,20 @@ class SynonymStore:
 
     def find_matching_groups(self, text: str) -> list[list[str]]:
         matches = self._find_matches(text)
-        return [list(group) for _, group in matches]
+        result = [list(group) for _, group in matches]
+        logger.info(f"find_matching_groups returned {len(result)} group(s) for text: {text}")
+        logger.debug(f"find_matching_groups detail: {result}")
+        return result
 
     def find_matched_terms(self, text: str) -> dict[str, list[str]]:
         matches = self._find_matches(text)
-        return {
+        result = {
             found_term: [term for term in group if normalize(term) != normalize(found_term)]
             for found_term, group in matches
         }
+        logger.info(f"find_matched_terms returned {len(result)} match(es) for text: {text}")
+        logger.debug(f"find_matched_terms detail: {result}")
+        return result
 
     def collect_expansion_terms(self, text: str) -> list[str]:
         matches = self._find_matches(text)

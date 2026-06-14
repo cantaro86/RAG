@@ -10,6 +10,7 @@ from src.agent_prompts import (
     prompt_transform_query,
 )
 from src.build_faiss import load_vectorstore
+from src.dizionario import SynonymStore
 from src.graph import RAGContext, build_agent_graph
 from src.llm_build import build_llm_pipe
 from src.retriever import build_retriever
@@ -65,6 +66,9 @@ def build_rag_agent(cfg: Config):
     initial_question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
     question_transformer = prompt_transform_query | llm_rewriter | StrOutputParser()
 
+    # Load the synonym store
+    synonyms = SynonymStore(excel_path=cfg.dizionario_path)
+
     ctx = RAGContext(
         topic_continuity_classifier=topic_continuity_classifier,
         retriever=retriever,
@@ -72,6 +76,7 @@ def build_rag_agent(cfg: Config):
         cleaner_chain=cleaner_chain,
         initial_question_rewriter=initial_question_rewriter,
         question_transformer=question_transformer,
+        synonyms=synonyms,
     )
 
     return build_agent_graph(ctx)

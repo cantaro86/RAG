@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from src._load_env import cfg
+from src.dizionario import SynonymStore
 from src.loggers import Logger
 from src.state import GraphState
 from src.utils import extract_source_filter, print_sources, render_context
@@ -22,6 +23,7 @@ class RAGContext:
     cleaner_chain: object
     initial_question_rewriter: object
     question_transformer: object
+    synonyms: SynonymStore
 
     def __post_init__(self):
         """Ensure all required dependencies are provided."""
@@ -208,7 +210,7 @@ def clean_answer(state, cleaner_chain):
     return state
 
 
-def transform_query(state, question_transformer):
+def transform_query(state, question_transformer, synonyms):
     """
     Transform the query to produce a better question.
 
@@ -221,10 +223,11 @@ def transform_query(state, question_transformer):
 
     logger.debug("---TRANSFORM QUERY---")
     question = state["question"]
-    hist = format_history(state.get("history", []))
+
+    matched_terms = synonyms.find_matched_terms(question)
 
     # Re-write question
-    better_question = question_transformer.invoke({"question": question, "history": hist})
+    better_question = question_transformer.invoke({"question": question, "matched_terms": matched_terms})
     logger.debug(f"⚠️ Counter {state['rewrite_count']}. Transformed question: {better_question}")
     return {**state, "question": better_question}
 
@@ -311,7 +314,14 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("clean_answer", partial(clean_answer, cleaner_chain=ctx.cleaner_chain))
 
-    workflow.add_node("transform_query", partial(transform_query, question_transformer=ctx.question_transformer))
+    workflow.add_node(
+        "transform_query",
+        partial(
+            transform_query,
+            question_transformer=ctx.question_transformer,
+            synonyms=ctx.synonyms,
+        ),
+    )
 
     workflow.add_node(
         "topic_detector", partial(topic_detector, topic_continuity_classifier=ctx.topic_continuity_classifier)

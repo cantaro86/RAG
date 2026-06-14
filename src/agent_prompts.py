@@ -133,7 +133,7 @@ Istruzioni:
 - i pronomi: "esso", "questo", "quello", "questi", "quelli", "essi", "loro", "lui", "lei", etc
 con i nomi specifici di condizioni, procedure o concetti menzionati nella cronologia.
 - Continuazioni di argomento implicite: "e poi?", "e se sì?", "e se no?", "c'è dell'altro?".
-- Entità nominate ambigue: numeri di tabella, nomi di sezione, numeri di riepilogo o qualsiasi etichetta,
+- Entità nominate ambigue: numeri di tabella, nomi di sezione, nomi di medicine,
 qualificale sempre con il corpus e il contesto menzionati nella cronologia.
 2. La cronologia può essere lunga: esaminatela TUTTA per identificare la procedura medica,
 la condizione e il contesto rilevanti.
@@ -164,10 +164,9 @@ Compito: La domanda seguente non è riuscita a recuperare i documenti pertinenti
 Riformulala per migliorare il recupero, senza modificarne il significato.
 
 Istruzioni:
-1. La domanda è già autosufficiente: NON aggiungere contesto proveniente dalla cronologia.
+1. Espandi o varia la terminologia medica se utile al recupero.
 
-2. Espandi o varia la terminologia medica: usa sinonimi, termini clinici correlati,
-o formulazioni alternative che potrebbero adattarsi meglio al linguaggio del documento.
+2. Usa i sinonimi forniti solo se sono pertinenti ai termini già presenti nella domanda.
 
 3. Se la domanda è complessa, concentrati sull'aspetto più specifico e recuperabile.
 
@@ -181,7 +180,7 @@ o formulazioni alternative che potrebbero adattarsi meglio al linguaggio del doc
             """
             Domanda: {question}
 
-            Cronologia: {history}
+            Sinonimi rilsevanti: {matched_terms}
             """,
         ),
     ]
