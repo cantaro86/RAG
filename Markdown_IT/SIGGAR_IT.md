@@ -79,7 +79,6 @@ Gli esiti categorici sono stati confrontati utilizzando il test χ² di Pearson 
 Il reclutamento per entrambi gli studi è iniziato nel marzo 2004 ed è stato completato nel dicembre 2007. Degli 8.484 pazienti potenzialmente idonei, 3.036 non sono stati inclusi perché essi stessi o il loro clinico hanno rifiutato il consenso, e 3.838 sono entrati nello studio parallelo CTC vs clisma opaco. Dei restanti 1.610 pazienti entrati nello studio CTC vs colonscopia, 30 hanno successivamente ritirato il consenso (25 [2,3 %] nel gruppo colonscopia e cinque [0,9 %] nel gruppo CTC), lasciando 1.580 per l'analisi (1.047 assegnati alla colonscopia e 533 alla CTC; figura 1).
 
 **Tabella 1: Caratteristiche dei pazienti inclusi in questo studio rispetto ai pazienti esclusi**
-
 | Variabile | CTC (n = 533) | Colonscopia (n = 1.047) | Inclusi nello studio (n = 1.580) | Pazienti esclusi* (n = 3.036) | p |
 |-----------------------|------------|---------------|---------------|---------------|---------|
 | **Sesso** | | | | | 0,0074 |
@@ -113,7 +112,6 @@ L'indagine diagnostica aggiuntiva del colon è stata eseguita più di tre volte 
 Nel gruppo colonscopia, 118 (11,3 %) pazienti hanno avuto una colonscopia incompleta (non ha raggiunto il cieco), e 72 (6,9 %) hanno avuto una procedura aggiuntiva per questo motivo. Ulteriori 13 (1,2 %) pazienti sono stati inviati per confermare un carcinoma o polipo sospetto (perché i campioni bioptici non erano stati prelevati o erano inadeguati per la conferma istologica), e un paziente è stato inviato per una procedura aggiuntiva a causa di sintomi persistenti (tabella 2). Per confronto, 83 pazienti (15,6 %) nel gruppo CTC sono stati inviati per indagare un carcinoma o polipo sospetto di 10 mm o più, 49 (9,2 %) per polipi più piccoli e 28 (5,3 %) a causa di un esame inadeguato o incertezza clinica (tabella 2). Tutti i 29 carcinomi e 22 dei 26 grandi polipi identificati alle successive indagini coliche nel gruppo CTC erano in pazienti nei quali una grande lesione era stata osservata al primo esame; il rendimento nei pazienti inviati per piccoli polipi o incertezza clinica era basso (tabella 3).
 
 **Tabella 2: Indagine colica aggiuntiva per motivo dell'indagine**
-
 | Motivo dell'indagine | CTC (n = 533) | Colonscopia (n = 1.047) | Rischio relativo (IC 95%) | p |
 |-----------------------------------------------------|-----------------------------|-------------------------|---------------------------|-----------|
 | Tutti gli invii per indagine colica aggiuntiva | 160* (30,0%) | 86† (8,2%) | 3,65 (2,87-4,65) | < 0,0001 |
@@ -131,7 +129,6 @@ Nel gruppo colonscopia, 118 (11,3 %) pazienti hanno avuto una colonscopia incomp
 *150 pazienti inviati all'endoscopia e dieci direttamente alla chirurgia. †16 pazienti inviati all'endoscopia, 63 alla radiologia e sette direttamente alla chirurgia. ‡Comprende dieci pazienti nei quali non sono stati prelevati campioni bioptici alla colonscopia o erano inconclusivi, e due pazienti inviati dopo una procedura alternativa. §Paziente inviato dopo una procedura alternativa.
 
 **Tabella 3: Risultati dell'indagine colica aggiuntiva, per motivo dell'indagine**
-
 | Motivo dell'indagine — CTC | Procedura colica aggiuntiva eseguita | CRC rilevato | Polipo ≥ 10 mm rilevato | CRC o polipo ≥ 10 mm rilevato |
 |----------------------------------------------------|---------|---------|---------|---------|
 | Tutti gli invii | 160 | 29 | 26 | 55 (34%) |
@@ -151,7 +148,6 @@ I tassi relativi di invio differivano significativamente tra uomini e donne (p =
 Dei 1.047 pazienti assegnati alla colonscopia, 119 (11,4 %) hanno ricevuto una diagnosi di carcinoma colorettale o di un grande polipo: 116 (11,1 %) alla colonscopia e tre (0,3 %) dopo una procedura alternativa. Per confronto, 57 (10,7 %) dei 533 pazienti assegnati alla CTC hanno ricevuto una diagnosi di carcinoma colorettale o di un grande polipo: 54 (10,1 %) alla CTC, due (0,4 %) alla precedente FS e uno (0,2 %) dopo una procedura alternativa. Il tasso complessivo di rilevamento di carcinoma colorettale o grandi polipi non differiva tra i gruppi (RR 0,94; IC al 95 % 0,70-1,27; p = 0,69).
 
 **Tabella 4: Tassi di rilevamento di carcinoma colorettale e grandi polipi**
-
 | | CTC (n = 533) | Colonscopia (n = 1.047) | Rischio relativo (IC 95%) | p |
 |--------------------------------------------------|--------------------|---------------|--------------------------|-----------|
 | Carcinoma colorettale o polipo ≥ 10 mm | 57 (10,7%) | 119 (11,4%) | 0,94 (0,70-1,27) | 0,69 |

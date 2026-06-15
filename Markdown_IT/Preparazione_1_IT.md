@@ -121,7 +121,6 @@ Tutte le analisi statistiche sono state eseguite utilizzando SPSS (versione 25.0
 Abbiamo arruolato 1.446 pazienti consecutivi (età media 62,37 ± 14,1 anni; 42 % maschi). In totale, 522 pazienti (36 %) sono stati considerati a rischio aumentato di CRC (anamnesi familiare o FOBT positivo) e 220 (15 %) sono stati sottoposti a CTC dopo una OC incompleta. Il DLP medio era di 180,68 mGy/cm (± 60,09). Le caratteristiche della popolazione dello studio sono riassunte nella Tabella 1.
 
 **Tabella 1** Dati demografici e caratteristiche basali dei pazienti
-
 | Popolazione | 1446 |
 |--------------------------|-----------------------|
 | **Sesso** | |
@@ -151,7 +150,6 @@ L'analisi eseguita per segmento ha rivelato che lo score qualitativo era signifi
 Come definito dal protocollo, lo score quantitativo totale varia da 0 a 144, considerando 8 segmenti colici in entrambe le acquisizioni supina e prona. Secondo l'analisi ROC (Fig. 3), uno score quantitativo cumulativo pari o inferiore a 5/144 dovrebbe essere considerato la soglia per definire adeguata la qualità della preparazione intestinale. Utilizzando questa soglia (≤ 5), l'AUC era 0,875 (IC al 95 %: 0,842-0,903), la SE 0,88 (IC al 95 %: 0,84-0,91) e la SP 0,78 (IC al 95 %: 0,61-0,90). Lo score quantitativo totale medio della popolazione dello studio era 4,16 (± 10,57).
 
 **Tabella 3** Score quantitativi
-
 | | Maschile | Femminile | p | < 65 | ≥ 65 | p | Diverticoli presenti | Diverticoli assenti | p |
 |------------------------------|-------------|-------------|----------|-------------|-------------|----------|---------------|---------------|---------------|
 | Omogeneità marcatura liquidi | 0,13 ± 0,43 | 0,11 ± 0,47 | 0,1481 | 0,10 ± 0,42 | 0,14 ± 0,49 | 0,9989 | 0,10 ± 0,40 | 0,14 ± 0,49 | 0,9999 |
@@ -159,7 +157,6 @@ Come definito dal protocollo, lo score quantitativo totale varia da 0 a 144, con
 | Distensione del colon | 0,07 ± 0,21 | 0,07 ± 0,20 | 0,9966 | 0,05 ± 0,19 | 0,10 ± 0,27 | 0,006 | 0,11 ± 0,30 | 0,04 ± 0,15 | 0,0001 |
 
 **Tabella 4** Score quantitativi. Analisi per segmento
-
 | Segmento | PRONA – Score 0 | PRONA – Media | PRONA – DS | SUPINA – Score 0 | SUPINA – Media | SUPINA – DS | TOTALE – Score 0 | TOTALE – Media | TOTALE – DS |
 |--------------|---------------|---------|---------|----------------|----------|----------|---------------|---------|---------|
 | RETTO | 1334 (92,25 %) | 0,15 | 0,64 | 1345 (93,02 %) | 0,17 | 0,92 | 1332 (92,13 %) | 0,32 | 1,45 |
@@ -176,7 +173,6 @@ Come definito dal protocollo, lo score quantitativo totale varia da 0 a 144, con
 Il questionario somministrato immediatamente dopo l'esame ha riportato che il 78,8 % dei pazienti aveva avuto meno di 5 evacuazioni prima dell'esame, e il disagio medio durante la procedura era di 26,3/100 (± 11,3). L'intervista telefonica, condotta un giorno dopo l'esame, ha riportato che il 79,8 % dei pazienti aveva avuto meno di 5 evacuazioni dopo l'esame, e che la maggior parte di questi (96,5 %) era disposta a ripetere l'esame CTC (Tabella 5).
 
 **Tabella 5** Compliance dei pazienti
-
 | Numero di evacuazioni | |
 |----------------------------|-------------------|
 | > 5 | 21,3 % |

@@ -74,7 +74,6 @@ La Tabella 3 mostra il confronto a coppie del tasso di partecipazione negli inte
 Nel gruppo FIT, 257 (5,5 %) dei 4677 partecipanti avevano un test positivo, e 217 (84,4 %) dei 257 si sono sottoposti a colonscopia, che è stata completata in 195 (89,9 %). Non vi erano test FIT tecnicamente inadeguati. Nei gruppi CTC aggregati, 129 (10 %) dei 1286 partecipanti avevano un test positivo, e 126 (97,7 %) dei 129 si sono sottoposti all'approfondimento con colonscopia. Confrontando i due gruppi CTC, 69 (10,2 %) dei 674 partecipanti del gruppo r-CTC avevano un test positivo, contro 60 (9,8 %) dei 612 partecipanti del gruppo f-CTC (P = 0,80). Su 1286 soggetti, 20 (1,6 %) avevano un test inadeguato, 17 (2,5 %) su 674 nel gruppo r-CTC e tre (0,5 %) su 612 nel gruppo f-CTC (P = 0,006). La CTC inadeguata era dovuta a scarsa distensione (n = 5) o a marcatura insufficiente (n = 13) o a entrambe (n = 2). Dei 20 soggetti con test inadeguato, sei hanno ripetuto con successo la CTC, uno ha avuto una seconda CTC inadeguata, sei hanno eseguito il FIT e sette hanno rifiutato un ulteriore esame. Nel gruppo OC, 146 (95,4 %) delle 153 colonscopie eseguite erano complete.
 
 **Tabella 1.** Caratteristiche socio-demografiche dei soggetti assegnati in modo casuale
-
 | Caratteristiche | FIT n(%) | r-CTC n(%) (n = 2617) | f-CTC n(%) (n = 2625) | OC n(%) (n = 1106) |
 |------------------------|-----------------|------------------------------|------------------------------|-------------------------|
 | **Età, anni** | | | | |
@@ -90,7 +89,6 @@ Nel gruppo FIT, 257 (5,5 %) dei 4677 partecipanti avevano un test positivo, e 21
 | Alto | 2313 (24,5) | 617 (24,2) | 601 (23,8) | 241 (22,4) |
 
 **Tabella 2.** Caratteristiche socio-demografiche dei partecipanti allo screening (invitati* / partecipanti† n(%))
-
 | Caratteristiche | FIT invitati (9288) | FIT partecip. (4677) | r-CTC invitati (2395) | r-CTC partecip. (674) | f-CTC invitati (2430) | f-CTC partecip. (612) | OC invitati (1036) | OC partecip. (153) |
 |-----------------------|------|------|------|------|------|------|------|------|
 | **Età, anni** | | | | | | | | |
@@ -108,7 +106,6 @@ Nel gruppo FIT, 257 (5,5 %) dei 4677 partecipanti avevano un test positivo, e 21
 | P | | <0,001‡ | | <0,001‡ | | <0,50‡ | | 0,85‡ |
 
 **Tabella 3.** Confronto a coppie del tasso di partecipazione tra i gruppi di screening
-
 | Gruppo di screening | Invitati* | Partecipanti | Tasso di partecipazione, % | RR (IC 95%) | P† |
 |--------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
 | r-CTC vs f-CTC | 2395 / 2430 | 674 / 612 | 28,1 / 25,2 | 1,12 (1,00-1,25) | 0,047 |
@@ -127,7 +124,6 @@ Il DR per invitato per la neoplasia avanzata della CTC aggregata era dell'1,4 %,
 Nei gruppi CTC, nove partecipanti hanno manifestato una reazione vaso-vagale durante l'insufflazione colica, e uno un'eruzione cutanea dopo l'ingestione del mezzo di contrasto orale. Nel gruppo FIT, sono stati osservati due sanguinamenti post-polipectomia. Nel gruppo OC, si è verificata una sindrome post-polipectomia in un caso. Non sono state riportate perforazioni dopo la CTC o dopo la OC di screening e l'approfondimento con OC. Reperti extracolici potenzialmente rilevanti sono stati rilevati in 65 (5 %) dei 1286 partecipanti alla CTC (Tabella 8).
 
 **Tabella 4.** Tasso di rilevamento per partecipante
-
 | | FIT n(%) (n = 4677) | r-CTC n(%) (n = 674) | f-CTC n(%) (n = 612) | r-CTC e f-CTC* n(%) (n = 1286) | OC n(%) (n = 153) |
 |-------------------------|----------------------|-----------------------|-----------------------|-----------------------------|----------------------|
 | Carcinoma | 6 (0,1) | 2 (0,1) | 5 (0,8) | 7 (0,5) | 0 (0,0) |
@@ -138,7 +134,6 @@ Nei gruppi CTC, nove partecipanti hanno manifestato una reazione vaso-vagale dur
 | Polipo iperplastico | 5 (0,1) | 9 (1,3) | 7 (1,1) | 16 (1,2) | 5 (3,3) |
 
 **Tabella 5.** Tasso di rilevamento per invitato
-
 | | FIT n(%) (n = 9288) | r-CTC n(%) (n = 2395) | f-CTC n(%) (n = 2430) | r-CTC e f-CTC* n(%) (n = 4825) | OC n(%) (n = 1036) |
 |--------------------------|-------------------|---------------------|---------------------|----------------------------|----------------------|
 | Carcinoma | 6 (0,1) | 2 (0,1) | 5 (0,2) | 7 (0,1) | 0 (0,0) |
@@ -149,7 +144,6 @@ Nei gruppi CTC, nove partecipanti hanno manifestato una reazione vaso-vagale dur
 | Polipo iperplastico | 5 (0,1) | 9 (0,4) | 7 (0,3) | 16 (0,3) | 5 (0,5) |
 
 **Tabella 6.** Istologia delle lesioni rilevate e localizzazione di carcinomi colorettali e adenomi avanzati
-
 | Caratteristiche | FIT n(%) | r-CTC n(%) | f-CTC n(%) | r-CTC e f-CTC* n(%) | OC n(%) |
 |--------------------|---------------|-----------------|-----------------|----------------------------|--------------|
 | **≥ 10 mm** | | | | | |
@@ -172,7 +166,6 @@ Nei gruppi CTC, nove partecipanti hanno manifestato una reazione vaso-vagale dur
 | Prossimale† | 30 (30) | 27 (55) | 19 (63) | 46 (58) | 4 (33) |
 
 **Tabella 7.** Modello di regressione logistica per la probabilità di rilevare una neoplasia avanzata, aggiustato per sesso, età, gruppo di randomizzazione e stato socio-economico
-
 | Caratteristiche | n | OR (IC 95%) |
 |----------------------|------|---------------------|
 | **Sesso** | | |
@@ -191,7 +184,6 @@ Nei gruppi CTC, nove partecipanti hanno manifestato una reazione vaso-vagale dur
 | Basso | 2610 | 1,38 (0,90-2,11) |
 
 **Tabella 8.** Reperti extracolici rilevati nei partecipanti r-CTC e f-CTC
-
 | Reperti extracolici | Partecipanti n(%) |
 |-----------------------------------------|------------------------|
 | Aneurismi aortici | 7 (11) |

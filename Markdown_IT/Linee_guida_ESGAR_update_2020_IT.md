@@ -30,7 +30,6 @@ Pubblicato online: 26 ottobre 2020 — © Thieme and European Society of Radiolo
 Questo è un aggiornamento della linea guida 2014–15 della European Society of Gastrointestinal Endoscopy (ESGE) e della European Society of Gastrointestinal and Abdominal Radiology (ESGAR). Affronta le indicazioni cliniche all'uso delle alternative di imaging alla colonscopia standard. È stata condotta una ricerca bibliografica mirata per valutare l'evidenza a sostegno dell'uso della colonscopia TC (CTC) o dell'endoscopia con capsula del colon (CCE). È stato adottato il sistema Grading of Recommendations Assessment, Development and Evaluation (GRADE) per definire la forza delle raccomandazioni e la qualità dell'evidenza.
 
 ## Abbreviazioni
-
 | ANDR | tasso di rilevamento della neoplasia avanzata (*advanced neoplasia detection rate*) |
 |--------|-------------------------------------------------------------------------------|
 | CCE | endoscopia con capsula del colon (CCE-1, prima generazione; CCE-2, seconda generazione) |

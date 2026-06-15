@@ -46,10 +46,7 @@ Lo strumento dello studio comprendeva un questionario auto-compilato per misurar
 
 I dati di 1.271 partecipanti sono stati raccolti per le analisi. La maggior parte era di sesso femminile (64,1 %), con un'età media di 58,9 anni (DS ± 5,5), coniugata (64,8 %), laureata con laurea triennale o titolo superiore (71,4 %), con un reddito proprio (58,9 %), con redditi inferiori a 30.000 THB mensili (64,1 %) e con almeno una malattia cronica (56,0 %). Più del 70 % di entrambi i sessi ha riferito una gravosità lieve della preparazione intestinale. Le femmine hanno valutato la gravosità grave più bassa rispetto ai maschi (11,8 vs 14,7 %). Tuttavia, le associazioni tra i gruppi caratteristici e i livelli di gravosità differivano significativamente in relazione al reddito proprio (p < 0,001), alla malattia cronica (p < 0,01) e al lassativo (p = 0,003) (Tabella 1). Gli individui senza un reddito proprio avevano significativamente livelli di gravosità grave inferiori rispetto a quelli che lo avevano (p < 0,001, OR 0,47, IC al 95 % 0,33-0,68), mentre quelli senza malattia cronica riferivano significativamente una gravosità moderata inferiore rispetto a quelli che l'avevano (p = 0,003, OR 0,61, IC al 95 % 0,44-0,84). Gli individui che hanno preparato l'intestino con PEG hanno valutato la gravosità moderata più alta rispetto a quelli che si erano preparati con NaP (p = 0,001, OR 1,74, IC al 95 % 1,26-2,40) (Tabella 2).
 
-**Tabella 1.** Caratteristiche dei partecipanti, livelli di gravosità della preparazione intestinale e associazioni tra caratteristiche e livelli di gravosità (n = 1271)
-
-THB = baht thailandese; mese = mese; PEG = polietilenglicole; NaP = sodio fosfato; X² = test del chi-quadrato.
-
+**Tabella 1.** Caratteristiche dei partecipanti, livelli di gravosità della preparazione intestinale e associazioni tra caratteristiche e livelli di gravosità (n = 1271) THB = baht thailandese; mese = mese; PEG = polietilenglicole; NaP = sodio fosfato; X² = test del chi-quadrato.
 | Caratteristica | Totale n(%) | Lieve n(%) | Moderata n(%) | Grave n(%) | X² (p) |
 |-----------------------------------------------|------------|----------|----------|----------|------|
 | **Sesso** | | | | | 0,3 |
@@ -78,7 +75,6 @@ THB = baht thailandese; mese = mese; PEG = polietilenglicole; NaP = sodio fosfat
 | NaP | 727 (57,2) | 555 (76,3) | 80 (11,0) | 92 (12,7) | |
 
 **Tabella 2.** Diverse associazioni tra i gruppi caratteristici e la gravosità della preparazione intestinale
-
 | Caratteristica | Gravosità preparazione | B | Errore std. | Wald | df | sig | Exp(B) | IC 95% |
 |---------------------|-----------------------------|-------|--------------|--------|------|--------|-----------|-----------|
 | Reddito proprio: no | Moderata | -0,19 | 0,17 | 1,41 | 1 | 0,23 | 0,82 | 0,59-1,14 |
@@ -95,7 +91,6 @@ Quanto al disagio addominale, la maggior parte di entrambi i sessi sottoposti a 
 **Tabella 3.** Associazioni tra le caratteristiche e i livelli di dolore rettale (colonscopia TC e colonscopia; valori n(%) per livello lieve/moderato/grave, con X²). I dati completi per ciascuna caratteristica (sesso, età, stato civile, livello di istruzione, reddito proprio, reddito, malattia cronica) sono riportati nell'originale. Le associazioni risultavano significative solo per il reddito proprio (CTC p = 0,001; colonscopia p < 0,001) e per la malattia cronica (CTC p = 0,04; colonscopia p = 0,01).
 
 **Tabella 4.** Diverse associazioni tra i gruppi caratteristici e il dolore rettale
-
 | Caratteristica | Dolore rettale | B | Errore std. | Wald | df | sig | Exp(B) | IC 95% |
 |---------------------|-----------------|-------|--------------|--------|------|--------|-----------|-----------|
 | Reddito proprio: no | **Colonscopia TC** | | | | | | | |
@@ -114,7 +109,6 @@ La categoria di riferimento è «lieve».
 **Tabella 5.** Associazioni tra le caratteristiche e i livelli di disagio addominale (colonscopia TC e colonscopia; valori n(%) per livello lieve/moderato/grave, con X²). Come per il dolore rettale, le associazioni risultavano significative solo per il reddito proprio (CTC p = 0,003; colonscopia p = 0,001) e per la malattia cronica.
 
 **Tabella 6.** Diverse associazioni tra i gruppi caratteristici e il disagio addominale
-
 | Caratteristica | Disagio addominale | B | Errore std. | Wald | df | sig | Exp(B) | IC 95% |
 |---------------------|------------------------|-------|--------------|--------|------|--------|----------|-----------|
 | Reddito proprio: no | **Colonscopia TC** | | | | | | | |

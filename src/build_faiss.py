@@ -21,7 +21,7 @@ from src.utils import _normalize
 logger = Logger.get_logger(__name__)
 
 
-SKIP_SECTIONS = {"references", "riferimenti", "bibliografia"}
+SKIP_SECTIONS = {"references", "riferimenti", "bibliografia", "referenze"}
 NOSPLIT_SECTIONS = {
     "recommendation",
     "recommendations",

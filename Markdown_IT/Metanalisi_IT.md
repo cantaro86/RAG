@@ -77,7 +77,6 @@ In sintesi, sono stati identificati 4.282 articoli nella ricerca PubMed. Dei 190
 La Tabella 1 mostra le caratteristiche di base degli studi inclusi. Complessivamente, 19/34 (56 %) studi sono stati condotti in Europa, 10 (29 %) negli Stati Uniti, tre in Asia e due in Nuova Zelanda. Gli anni di pubblicazione variavano dal 2003 al 2017 (53 % dopo il 2013). In totale, 14/34 (41 %) studi erano studi clinici prospettici; i restanti 20 (59 %) si sono svolti nella pratica clinica di routine, prospettica o retrospettiva. La maggioranza (62 %) degli studi era di natura prospettica. Solo 7/34 (21 %) studi coinvolgevano esclusivamente adulti in età anziana, mentre i restanti 27 studi coinvolgevano pazienti di qualsiasi età, compresi gli adulti in età anziana.
 
 **TABELLA 1: Caratteristiche degli studi inclusi**
-
 | Primo autore | Anno | Periodo della CTC | Disegno dello studio | Paese | N. di centri | Contesto | Caratteristiche della popolazione in studio | N. di pazienti | N. di pazienti ≥ 65 anni |
 |----------------|--------|-----------------|-----------------|-------------|-------------------|-----------|---------------------------------------|--------------------|------------------------------------|
 | Kealey | 2004 | NR | P | Irlanda | Singolo | C | Sintomi di CRC | 72 | 72 |
@@ -142,7 +141,6 @@ Una preparazione intestinale catartica, tipicamente costituita da polietilenglic
 Nell'analisi di meta-regressione univariata (Tabella 2), sono state osservate associazioni positive statisticamente significative per la proporzione di coorti con sintomi, per il sesso maschile, per la sede di studio europea rispetto a quella statunitense e per gli studi multicentrici rispetto a quelli monocentrici. Sono state osservate associazioni negative significative per gli studi eseguiti nella pratica clinica di routine rispetto al contesto di studio (*trial*) e per gli studi con un limite di età superiore di 80 anni o più.
 
 **TABELLA 2: Modello di meta-regressione che esamina le fonti di eterogeneità degli invii alla colonscopia per i pazienti con grandi polipi o masse (n = 29)**
-
 | Variabile | N. di studi | OR (IC 95 %) | p |
 |-----------------------------------------------------|---------------|----------------------------------|----------|
 | Anno di pubblicazione (variabile continua) | 29 | 1,00 (0,93-1,07) | 0,963 |

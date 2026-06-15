@@ -29,7 +29,6 @@ Il CAD ha tre modalità: primaria, secondaria e concorrente. La modalità primar
 In questo articolo, esaminiamo le cause più comuni di risultati falsi positivi del CAD e presentiamo strategie per valutare i possibili polipi, con i potenziali tranelli che possono condurre a interpretazioni errate del lettore (Tabella 1).
 
 **Tabella 1: Cause di risultati falsi positivi al CAD della colonscopia TC**
-
 | Causa | N. di risultati falsi positivi del CAD (%)* |
 |-----------------------------|---------------------------------------------|
 | Pliche haustrali | 227 (28,2) |
@@ -54,7 +53,6 @@ Sono presentati i dati sulla frequenza relativa dei risultati falsi positivi del
 La nostra esperienza con i risultati falsi positivi del CAD si basa su uno studio in cui 19 lettori hanno interpretato 100 casi in due sessioni separate: una senza CAD (la sessione senza assistenza CAD) e una con CAD implementato in modalità di secondo lettore (la sessione con assistenza CAD), distanti almeno 27 giorni l'una dall'altra (24). I 19 lettori erano radiologi non esperti adeguatamente addestrati, provenienti sia da contesti accademici sia territoriali, con una media di 5 anni di esperienza nell'interpretazione di casi di colonscopia TC (intervallo 1–10 anni), che interpretavano in media 92 casi all'anno (intervallo 20–300 casi). Il sistema CAD presentava 8,1 risultati falsi positivi del CAD per paziente (comprese le serie supina e prona), con una sensibilità in prestazione autonoma (*stand-alone*) del 93,2 % per i grandi polipi (≥ 10 mm) e del 91,8 % per i piccoli adenomi (6–10 mm), un tasso comparabile ai precedenti resoconti sulla prestazione dei sistemi CAD (28, 29).
 
 **Tabella 2: Tassi di risultati falsi positivi del lettore correlati ai risultati falsi positivi del CAD, per causa**
-
 | Causa (N.) | N. di FP del CAD che hanno determinato FP del lettore (%*) | N. di FP del lettore (Incidenza [%†]) |
 |--------------------------------|-----------------------------------------------------|------------------------------------------|
 | Pliche haustrali (227) | 4,0 (9) | 21 (0,5) |

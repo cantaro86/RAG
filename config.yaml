@@ -19,7 +19,7 @@ dizionario_path: "./dizionario.xlsx"
 index_dir: "./faiss_index"
 
 # Reindex PDFs or not
-reindex: false
+reindex: true
 workers: 8
 
 # Move index to GPU if available

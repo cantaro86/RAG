@@ -13,25 +13,15 @@ Monika Ferlitsch, Cesare Hassan, Raf Bisschops, Pradeep Bhandari, Mário Dinis-R
 ## RACCOMANDAZIONI PRINCIPALI
 
 **1** L'ESGE raccomanda la polipectomia con ansa a freddo (*cold snare polypectomy*, CSP), comprendente un chiaro margine di tessuto normale (1-2 mm) attorno al polipo, per la rimozione dei polipi diminutivi (≤ 5 mm). *Raccomandazione forte, evidenza di alta qualità.*
-
 **2** L'ESGE raccomanda di non utilizzare l'escissione con pinza bioptica a freddo (*cold biopsy forceps*) a causa del suo elevato tasso di resezione incompleta. *Raccomandazione forte, evidenza di qualità moderata.*
-
 **3** L'ESGE raccomanda la CSP, comprendente un chiaro margine di tessuto normale (1-2 mm) attorno al polipo, per la rimozione dei piccoli polipi (6-9 mm). *Raccomandazione forte, evidenza di alta qualità.*
-
 **4** L'ESGE raccomanda la polipectomia con ansa a caldo (*hot snare polypectomy*) per la rimozione di polipi adenomatosi non peduncolati di dimensione 10-19 mm. *Raccomandazione forte, evidenza di alta qualità.*
-
 **5** L'ESGE raccomanda la resezione mucosa endoscopica (EMR) convenzionale (basata sulla diatermia) per i grandi (≥ 20 mm) polipi adenomatosi non peduncolati (LNPCP). *Raccomandazione forte, evidenza di alta qualità.*
-
 **6** L'ESGE suggerisce che l'EMR sott'acqua (*underwater*) possa essere considerata un'alternativa all'EMR a caldo convenzionale per il trattamento degli LNPCP adenomatosi. *Raccomandazione debole, evidenza di qualità moderata.*
-
 **7** La dissezione sottomucosa endoscopica (ESD) può essere suggerita anche come alternativa per la rimozione di LNPCP di ≥ 20 mm in casi selezionati e in centri ad alto volume. *Raccomandazione debole, evidenza di bassa qualità.*
-
 **8** L'ESGE raccomanda che, dopo EMR frammentata (*piecemeal*) di LNPCP con ansa a caldo, i margini di resezione siano trattati mediante ablazione termica utilizzando la coagulazione soft con la punta dell'ansa (*snare-tip soft coagulation*, STSC) per prevenire la recidiva di adenoma. *Raccomandazione forte, evidenza di alta qualità.*
-
 **9** L'ESGE raccomanda la polipectomia con ansa a freddo (frammentata) o l'EMR a freddo per le lesioni serrate sessili (SSL) di tutte le dimensioni senza displasia sospetta. *Raccomandazione forte, evidenza di qualità moderata.*
-
 **10** L'ESGE raccomanda la chiusura endoscopica profilattica con clip del difetto mucoso dopo EMR di LNPCP nel colon destro, per ridurre il rischio di sanguinamento tardivo. *Raccomandazione forte, evidenza di alta qualità.*
-
 **11** L'ESGE raccomanda che le tecniche di resezione in blocco (*en bloc*), come l'EMR en bloc, l'ESD, la dissezione intermuscolare endoscopica, la resezione endoscopica a tutto spessore o la chirurgia, debbano essere le tecniche di scelta nei casi con sospetto carcinoma invasivo superficiale, che altrimenti non possa essere rimosso en bloc con la polipectomia standard o l'EMR. *Raccomandazione forte, evidenza di qualità moderata.*
 
 ## ABBREVIAZIONI

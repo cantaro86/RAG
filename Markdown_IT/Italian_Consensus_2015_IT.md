@@ -70,7 +70,6 @@ Nel paragrafo «preparazione all'esame e modalità della tecnica», sono stati e
 Il paragrafo «Indicazioni alla colonscopia virtuale» è stato modificato in base all'introduzione del concetto
 
 **Tabella 1** Sono riportati, per ciascun paragrafo, i punteggi medi di accordo ottenuti dal primo e dal secondo round di consultazione
-
 | Paragrafi del consenso | Primo round – Punteggio medio | Primo round – Indice di Cronbach | Secondo round – Punteggio medio | Secondo round – Indice di Cronbach |
 |--------------------------------|---------------|------------------|----------------|------------------|
 | Definizione di colonscopia virtuale | 3,6 | 0,84 | 3,8 | 0,93 |
@@ -84,7 +83,6 @@ Il paragrafo «Indicazioni alla colonscopia virtuale» è stato modificato in ba
 Sono inoltre riportati gli indici di Cronbach per ciascun round.
 
 **Tabella 2** Giudizi degli esperti per ciascun paragrafo nel primo round
-
 | | Definizione | Indicazioni: chi può sottoporsi alla colonscopia virtuale | Preparazione e tecnica dell'esame | I vantaggi della CTC | I rischi della CTC | Limiti |
 |----------------------|--------------|---------------------------------------------------------|----------------------------------------------|---------------------------|----------------------|----------|
 | Completamente d'accordo | 8 | 6 | | 8 | 7 | 7 |
@@ -93,7 +91,6 @@ Sono inoltre riportati gli indici di Cronbach per ciascun round.
 | Completamente in disaccordo | 0 | 1 | 1 | 0 | 0 | 0 |
 
 **Tabella 3** Giudizi degli esperti per ciascun paragrafo nel secondo round
-
 | | Definizione | Indicazioni: chi può sottoporsi alla colonscopia virtuale | Preparazione e tecnica dell'esame | I vantaggi della CTC | I rischi della CTC | Limiti |
 |----------------------|--------------|---------------------------------------------------------|----------------------------------------------|---------------------------|----------------------|----------|
 | Completamente d'accordo | 8 | 7 | 5 | 7 | 8 | 8 |

@@ -45,7 +45,6 @@ J Am Coll Radiol 2022;19:S208–S222. Copyright © 2022 American College of Radi
 ACR Appropriateness Criteria — Stadiazione del carcinoma colorettale: aggiornamento 2021. Varianti da 1 a 3 e Tabelle 1 e 2
 
 **Variante 1. Carcinoma del retto. Stadiazione locoregionale. Imaging iniziale.**
-
 | Procedura | Categoria di appropriatezza | Livello di radiazione relativo |
 |----------------------------------------------------|----------------------------|----------------------------|
 | Ecografia pelvica transrettale | Solitamente appropriata | O |
@@ -58,7 +57,6 @@ ACR Appropriateness Criteria — Stadiazione del carcinoma colorettale: aggiorna
 | TC addome e pelvi senza e con mezzo di contrasto e.v. | Solitamente non appropriata | ☢☢☢☢ |
 
 **Variante 2. Carcinoma del retto. Stadiazione locoregionale. Dopo terapia neoadiuvante.**
-
 | Procedura | Categoria di appropriatezza | Livello di radiazione relativo |
 |----------------------------------------------------|-----------------------------------|----------------------------|
 | RM pelvica senza e con mezzo di contrasto e.v. | Solitamente appropriata | O |
@@ -73,7 +71,6 @@ ACR Appropriateness Criteria — Stadiazione del carcinoma colorettale: aggiorna
 Korngold et al. ▪ Stadiazione del carcinoma colorettale: aggiornamento 2021
 
 **Variante 3. Carcinoma colorettale. Stadiazione per metastasi a distanza. Imaging iniziale.**
-
 | Procedura | Categoria di appropriatezza | Livello di radiazione relativo |
 |------------------------------------------------------------------------------------|----------------------------|----------------------------|
 | TC torace con mezzo di contrasto e.v. e RM addome con mezzo di contrasto e.v. | Solitamente appropriata | ☢☢☢ |
@@ -87,7 +84,6 @@ Korngold et al. ▪ Stadiazione del carcinoma colorettale: aggiornamento 2021
 | TC torace addome pelvi senza e con mezzo di contrasto e.v. | Solitamente non appropriata | ☢☢☢☢ |
 
 **Tabella 1. Nomi e definizioni delle categorie di appropriatezza**
-
 | Nome della categoria di appropriatezza | Punteggio di appropriatezza | Definizione della categoria di appropriatezza |
 |-----------------------------------|--------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Solitamente appropriata | 7, 8 o 9 | La procedura di imaging o di trattamento è indicata negli scenari clinici specificati con un rapporto rischio-beneficio favorevole per i pazienti. |
@@ -96,7 +92,6 @@ Korngold et al. ▪ Stadiazione del carcinoma colorettale: aggiornamento 2021
 | Solitamente non appropriata | 1, 2 o 3 | È improbabile che la procedura di imaging o di trattamento sia indicata negli scenari clinici specificati, oppure il rapporto rischio-beneficio per i pazienti è verosimilmente sfavorevole. |
 
 **Tabella 2. Designazioni del livello di radiazione relativo**
-
 | RRL | Stima dell'intervallo di dose efficace nell'adulto (mSv) | Stima dell'intervallo di dose efficace in età pediatrica (mSv) |
 |--------------------------------------------------|--------------------------------------------------|--------------------------------------------------|
 | O | 0 | 0 |
@@ -130,9 +125,6 @@ Nei tumori del retto, a causa della necessità di un dettaglio anatomico ad alta
 
 L'imaging iniziale è definito come l'imaging eseguito all'inizio dell'episodio di cura per la condizione medica definita dalla variante. Più di una procedura può essere considerata solitamente appropriata nella valutazione di imaging iniziale quando:
 - Vi sono procedure che sono alternative equivalenti (cioè verrà richiesta una sola procedura per fornire le informazioni cliniche necessarie a gestire efficacemente la cura del paziente).
-
-## OPPURE
-
 - Vi sono procedure complementari (cioè più di una procedura viene richiesta come insieme o simultaneamente, dove ciascuna procedura fornisce informazioni cliniche uniche per gestire efficacemente la cura del paziente).
 
 ## DISCUSSIONE DELLE PROCEDURE PER VARIANTE — Variante 1: Carcinoma del retto. Stadiazione locoregionale. Imaging iniziale

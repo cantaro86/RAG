@@ -43,7 +43,6 @@ Il colon viene insufflato con aria o anidride carbonica mediante un catetere ret
 L'uso di scanner TC multidetettore (MDCT) (≥ 16 file) è considerato un prerequisito essenziale per ottenere esami di alta qualità (collimazione massima ≤ 2,5 mm; singolo respiro trattenuto) e a bassa dose. L'uso di dispositivi di modulazione della dose [29], che riducono l'esposizione alla dose del 30 %-35 % (eccetto nei pazienti obesi), è fortemente raccomandato; se disponibili, sono preferite la ricostruzione iterativa statistica adattiva (ASIR) e le ricostruzioni iterative basate sul modello (*model-based*) [30], che riducono l'esposizione alla dose fino al 50 %.
 
 **Tabella 1. Tutti i dati rilevanti**
-
 | Rif. | Anno | Disegno | Polipo > 6 mm – Se | Polipo > 6 mm – Sp | Polipo 6-10 mm – Se | Polipo 6-10 mm – Sp | Polipo > 10 mm – Se | Polipo > 10 mm – Sp | Carcinoma – Se |
 |-----------------------|--------|---------------|-------|-------|-------|-------|-------|-------|-------|
 | Pickhardt et al [33] | 2011 | Meta-analisi | | | | | | | 96,1% |

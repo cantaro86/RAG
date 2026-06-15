@@ -123,7 +123,6 @@ ECF clinicamente rilevanti (C-RADS E4 e aneurismi aortici ≥ 4 cm) sono stati d
 Nel gruppo CTC, 14 (0,5 %) pazienti hanno lamentato una reazione vago-vagale e uno (0,04 %) un rash cutaneo. Nel gruppo FS, reazioni vago-vagali si sono verificate in 9 (0,4 %) pazienti. In entrambi i gruppi, gli eventi avversi si sono risolti spontaneamente e non hanno richiesto trattamento medico o ricovero ospedaliero.
 
 **Tabella 1. Trial di rilevamento: caratteristiche dei pazienti**
-
 | | Sigmoidoscopia | Colonscopia TC | Totale |
 |--------------------------------|-----------------|-------------------|-------------|
 | **Età (anni)** | | | |
@@ -139,7 +138,6 @@ Nel gruppo CTC, 14 (0,5 %) pazienti hanno lamentato una reazione vago-vagale e u
 | Sì | 344 (12,9) | 328 (12,6) | 672 (12,8) |
 
 **Tabella 2. Reperti per paziente, per sesso, per sigmoidoscopia e colonscopia TC (CTC)**
-
 | | FS — Donne (N=1.298) % | FS — Uomini (N=1.375) % | FS — Totale (N=2.673) % | CTC — Donne (N=1.266) % | CTC — Uomini (N=1.329) % | CTC — Totale (N=2.595) % | RR* (IC 95%) |
 |------------------------------|------|------|------|------|------|------|---------------------|
 | Nessun reperto | 1.087 — 83,8 | 1.018 — 74,0 | 2.105 — 78,8 | 1.183 — 93,4 | 1.183 — 89,0 | 2.366 — 91,2 | – |
@@ -153,7 +151,6 @@ Nel gruppo CTC, 14 (0,5 %) pazienti hanno lamentato una reazione vago-vagale e u
 | Carcinoma colorettale § | 2 — 0,2 | 7 — 0,5 | 9 — 0,3 | 5 — 0,4 | 5 — 0,4 | 10 — 0,4 | 1,14 (0,47-2,31) |
 
 **Tabella 3. Fattori associati al rilevamento di neoplasia avanzata all'analisi multivariata**
-
 | | RR* | IC 95% |
 |------------------------------|-------|--------------|
 | **Sesso** | | |
@@ -172,7 +169,6 @@ Nel gruppo CTC, 14 (0,5 %) pazienti hanno lamentato una reazione vago-vagale e u
 *RR aggiustato per centro di screening e per tutte le altre variabili nel modello. FDR = parente di primo grado; RR = rischio relativo; TC = colonscopia.
 
 **Tabella 4. Distribuzione della neoplasia avanzata retto-sigmoidea e prossimale tra gli screenati con sigmoidoscopia flessibile (FS) e colonscopia TC (CTC)**
-
 | | Sigmoidoscopia, N — % (IC 95%) | CTC, N — % (IC 95%) | RR* (IC 95%) |
 |---------------------------|-------------------------------|-----------------------|---------------------|
 | **Colon distale** | | | |
@@ -185,7 +181,6 @@ Nel gruppo CTC, 14 (0,5 %) pazienti hanno lamentato una reazione vago-vagale e u
 | Totale | 34 ‡ — 1,3 (0,9-1,8) | 69 ‡ — 2,7 (2,1-3,4) | 2,06 (1,37-3,10) |
 
 **Tabella 5. Caratteristiche istologiche della neoplasia avanzata rilevata da colonscopia TC (CTC) e sigmoidoscopia flessibile (FS) in base alle dimensioni**
-
 | | Sigmoidoscopia, N (%; IC 95%) | CTC, N (%; IC 95%) | RR (IC 95%) |
 |--------------------------------------|--------------------------------|--------------------------|------------------|
 | **Lesione ≥ 10 mm, n** | 117 | 129 | |

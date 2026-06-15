@@ -73,7 +73,6 @@ Più polipi, in termini assoluti e su base per paziente (tutti, ≥ 10 mm e 6-9 
 L'appaiamento dei polipi è stato intrapreso nei pazienti che avevano una CCE completa e adeguatamente preparata e poi sono proseguiti a una colonscopia terapeutica completa e adeguatamente preparata o, quando appropriato, a una sigmoidoscopia flessibile (Tabella 3). Poiché i pazienti veri negativi non possono essere identificati, la specificità della CCE non può essere calcolata. Mentre l'appaiamento per polipo aveva una sensibilità del 75-79 %, la sensibilità per paziente era del 97 % sia per i polipi ≥ 10 mm sia per quelli 6-9 mm.
 
 **Tabella 2. Reperti CCE appaiati ai successivi reperti dell'endoscopia colorettale, presentati su base di «intenzione di indagare» (*intention to investigate*).**
-
 | Caratteristica | CCE, n = 2.301 (%) | Colonscopia, n = 1.493 (%) | Sigmoidoscopia flessibile, n = 808 (%) | Totale, n = 2.301 (%) |
 |-------------------------------------|-------------|-------------|-------------|-------------|
 | **Indicazione all'indagine successiva** | | | | |
@@ -94,7 +93,6 @@ L'appaiamento dei polipi è stato intrapreso nei pazienti che avevano una CCE co
 | Colite | 136 (6%) | 105 (5%) | 37 (2%) | 142 (6%) |
 
 **Tabella 3. Accuratezza di appaiamento dei polipi in coloro con una CCE ed endoscopia colorettale complete e adeguatamente preparate.**
-
 | | Polipo ≥ 10 mm — Per paziente | Polipo ≥ 10 mm — Per polipo | Polipo 6-9 mm — Per paziente | Polipo 6-9 mm — Per polipo |
 |---------------------|---------------------|---------------------|----------------|----------------|
 | Veri positivi CCE | 252 | 507 | 382 | 744 |
@@ -111,7 +109,6 @@ La Tabella 4 riassume gli esiti clinici comparativi dall'indagine iniziale su ba
 La Tabella 5 presenta l'accuratezza diagnostica comparativa per gli endpoint combinati dei 3.035 (63 %) pazienti CCE, 4.405 (88 %) pazienti colonscopia e 411 (88 %) pazienti colonscopia TC le cui indagini erano complete e adeguate. Qui, la prevalenza di lesioni di massa confermate essere CRC era dell'1,6 %, 2,8 % e 3,2 % nei pazienti CCE, colonscopia e colonscopia TC, rispettivamente. I polipi sono stati rilevati nel 49 % dei pazienti CCE, 40 % colonscopia e 24 % colonscopia TC. Per i polipi ≥ 10 mm era del 16 %, 10 % e 9 % dei pazienti, rispettivamente, e per i polipi 6-9 mm era del 20 %, 11 % e 12 %, rispettivamente. È stata notata una più alta proporzione di polipi del colon trasverso nei pazienti CCE. Come atteso, vi era una variazione correlata all'età nella prevalenza dei polipi in tutte e tre le coorti. Per i pazienti CCE di età ≥ 60 anni era del 64 % rispetto al 56 % in quelli < 60 anni; per i pazienti colonscopia era del 55 % e 47 %, rispettivamente; e per i pazienti colonscopia TC era del 32 % e 8 %, rispettivamente. I maschi avevano una proporzione più alta di polipi rispetto alle femmine in ciascuna coorte. Per l'endpoint combinato di CRC, polipi significativi e colite, la prevalenza era del 32 % per coloro sottoposti a CCE, 22 % per coloro sottoposti a colonscopia e 19 % alla colonscopia TC. Accettando che lo studio fosse sottodimensionato (*underpowered*) per valutare la colonscopia TC, la CCE non era significativamente meno sensibile rispetto alle altre modalità diagnostiche.
 
 **Tabella 4. Accuratezza comparativa: prevalenza di malattia per «intenzione di indagare» in ciascuna coorte d'indagine.**
-
 | Caratteristica | CCE, n = 4.878 (%) | Colonscopia, n = 5.025 (%) | CTC, n = 466 (%) |
 |---------------------------------|-------------|-------------|-------------|
 | CRC | 54 (1,1) | 151 (3,0) | 14 (3,0) |
@@ -129,7 +126,6 @@ La Tabella 5 presenta l'accuratezza diagnostica comparativa per gli endpoint com
 | Altre malattie gastrointestinali | 1.111 (23) | 267 (5) | 58 (12) |
 
 **Tabella 5. Accuratezza comparativa: prevalenza di malattia in ciascuna coorte d'indagine per coloro con procedure complete e adeguatamente preparate.**
-
 | Caratteristica | CCE, n = 3.035 (%) | Colonscopia, n = 4.405 (%) | CTC, n = 411 (%) |
 |---------------------------|-------------|-------------|-------------|
 | CRC | 50 (1,6) | 125 (2,8) | 13 (3,2) |
@@ -148,7 +144,6 @@ La Tabella 5 presenta l'accuratezza diagnostica comparativa per gli endpoint com
 Una capsula di pervietà è stata utilizzata in 887 (18 %) dei pazienti sottoposti a CCE, il 91 % dei quali richiesta da 7 dei centri pilota. Il tasso complessivo di complicanze per la CCE era dell'1,6 % (Tabella 6). Le complicanze più comuni erano l'incapacità di deglutire la capsula, il vomito e la sospetta ritenzione. Tre laparotomie d'emergenza sono state eseguite su pazienti dopo la CCE (0,06 %). Vi è stato un decesso e vi sono state due perforazioni. I casi sono stati rivisti dal team clinico locale e dall'EAG. Si è concluso che ciascun evento era causato dalla patologia rilevata dalla CCE piuttosto che dalla capsula stessa. Inoltre, vi sono stati 64 (1,3 %) insuccessi tecnici con la CCE, in gran parte causati da un insuccesso della telecamera nel catturare le immagini del colon destro.
 
 **Tabella 6. Sicurezza procedurale della CCE.**
-
 | Caratteristica | n = 4.878 (%) |
 |------------------------------------|----------------|
 | Capsula di pervietà utilizzata | 877 (18%) |

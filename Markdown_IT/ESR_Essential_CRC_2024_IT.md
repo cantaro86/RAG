@@ -81,7 +81,6 @@ L'interpretazione delle immagini RM dopo la CRT neoadiuvante rappresenta una sfi
 **Fig. 2** Stadiazione locale del carcinoma del retto. Lo stadio T è rappresentato in a, da Tis, limitato alla mucosa, a T4b, che coinvolge altri organi. In b sono mostrati i fattori ad alto rischio più importanti — deposito tumorale nel grasso mesorettale, invasione venosa extramurale e coinvolgimento della fascia mesorettale — che non influenzano la stadiazione TNM.
 
 **Tabella 1** Iter del carcinoma colorettale dallo screening al follow-up
-
 | | Test | Note |
 |-----------|--------------------------------------------------------------------------------|--------------------------------------------------------|
 | Screening | | Riduzione del tasso di mortalità |

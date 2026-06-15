@@ -63,7 +63,6 @@ Il questionario concordato è stato diffuso elettronicamente ai membri del comit
 Un research fellow radiologo ha condotto una dettagliata ricerca bibliografica basata sulla strategia utilizzata da Puylaert et al. [4]. I dettagli completi della ricerca sono riportati nella Tabella 1. Il fellow ha esaminato gli abstract recuperati e ha selezionato quelli pertinenti alle voci del questionario. Le questioni dubbie sono state risolte tramite discussione in presenza con il presidente del comitato. La ricerca finale ha recuperato un elenco di 727 pubblicazioni, che sono state diffuse a tutti i membri del comitato, insieme agli abstract completi. I gruppi di lavoro erano liberi di aggiornare la ricerca bibliografica a propria discrezione.
 
 **Tabella 1** Strategia di ricerca bibliografica (da Puylaert et al. [4])
-
 | Dettagli della ricerca | Periodo: gennaio 1983 – dicembre 2015 |
 |-----------------|----------------------------------------------------------------------------------------------------|
 | Ricerca Medline | |
@@ -116,7 +115,6 @@ L'attuale pratica clinica dei membri del panel è riassunta nella Tabella 2. I 1
 Il questionario finale concordato consisteva in 157 voci, che generavano singole affermazioni di consenso. Al primo round di voto del comitato, 129 affermazioni hanno raggiunto il consenso secondo la definizione a priori. Le restanti 28 affermazioni non hanno raggiunto il consenso e sono state modificate per produrre un set di 19 affermazioni, tutte le quali hanno raggiunto l'accordo di consenso nel secondo round di voto. Le affermazioni che non potevano essere modificate per raggiungere il consenso sono state eliminate e sono mostrate nella Tabella 3.
 
 **Tabella 2** Attuale pratica clinica dei membri del comitato di esperti (n = 13)
-
 | | Membri del panel che la eseguono di routine | Carico medio annuo di casi |
 |----------------|--------------------------------------|-------------------------|
 | MRE | 13 | 313 |
@@ -200,9 +198,7 @@ Le raccomandazioni per il volume del mezzo di contrasto orale e per la dose di s
 ---
 
 **Tabella 3** Affermazioni per le quali non è stato possibile raggiungere il consenso dopo il tentativo di modifica
-
 *(La forza dell'evidenza secondo l'Oxford Centre for Evidence Based Medicine è indicata tra parentesi.)*
-
 - Si raccomanda che il volume minimo di mezzo di contrasto orale per MRE/enteroclisi RM o CTE/enteroclisi TC dedicate sia di 500 ml (IV)
 - La suddivisione del mezzo di contrasto orale in due carichi e la scansione dopo l'ingestione di ciascuno per migliorare la distensione del piccolo intestino non è raccomandata (V)
 - L'intensità di campo ottimale per MRE/enteroclisi RM è 1,5 T (IV)
@@ -216,7 +212,6 @@ Le raccomandazioni per il volume del mezzo di contrasto orale e per la dose di s
 ---
 
 **Tabella 4** Elenco finale delle affermazioni di consenso (che hanno raggiunto un punteggio di accordo di 4 o 5 da parte di almeno l'80 % dei membri del comitato)
-
 *(La forza dell'evidenza secondo l'Oxford Centre for Evidence Based Medicine è indicata tra parentesi. MRE = enterografia RM; CTE = enterografia TC; T1W = pesata in T1; T2W = pesata in T2. 4 = parzialmente d'accordo; 5 = fortemente d'accordo.)*
 
 ### PAZIENTI ADULTI

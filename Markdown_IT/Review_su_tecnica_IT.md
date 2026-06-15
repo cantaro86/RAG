@@ -103,7 +103,6 @@ Quando si avvia e si gestisce una pratica di CTC, può essere utile confrontare 
 La CTC, come tecnologia, ha avuto un'adozione piuttosto lenta come alternativa per lo screening colorettale, nonostante oltre 20 anni di sviluppo e perfezionamento. Gran parte di ciò è verosimilmente correlata a una tecnica subottimale, che può rendere uno studio, dotato di una curva di apprendimento già ripida, ancora più difficile e frustrante da interpretare per il lettore principiante. Ancor prima dell'inizio dell'acquisizione delle immagini, un colon ben preparato e ben disteso è cruciale per il successo della CTC, e l'uso costante di protocolli tecnici ottimizzati renderà la CTC più facile da interpretare. Inoltre, una tecnica di scansione ottimale dovrebbe affrontare qualsiasi preoccupazione riguardo alla dose di radiazioni per un esame e una popolazione di screening in cui la dose non deve essere una preoccupazione maggiore.
 
 **Tabella 1. Esempio di regime di preparazione intestinale**
-
 | Tempistica | Azione |
 |--------------|----------|
 | Dopo la mezzanotte | Dieta a liquidi chiari |

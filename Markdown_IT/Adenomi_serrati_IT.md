@@ -68,7 +68,6 @@ La maggior parte dei TSA (66 %) era localizzata nel colon distale (rispetto alla
 Le dimensioni medie dei TSA erano di 19 mm (DS, ± 16 mm; range, 3–80 mm). Complessivamente, il 4 % (3/67) dei TSA era diminutivo (≤ 5 mm), il 33 % (22/67) era piccolo (6–9 mm) e il 63 % (42/67) era grande (≥ 10 mm).
 
 **TABELLA 1: Caratteristiche demografiche e cliniche dei pazienti con adenomi serrati tradizionali (TSA) valutati mediante colonscopia TC (CTC)**
-
 | Reperto | Valore |
 |---------------------------------------------|---------|
 | Caratteristica demografica (n = 58) | |

@@ -36,7 +36,6 @@ La CTC di screening identifica individui del tutto asintomatici con polipi o car
 In generale, la CTC dovrebbe essere offerta per lo screening ogni 5 anni dopo i 50 anni di età se la colonscopia ottica è controindicata dal punto di vista medico, tecnicamente impegnativa o incompleta.¹⁰⁻¹⁴ Anche la preferenza del paziente può essere una ragione per scegliere la CTC. Alcuni dati suggeriscono che gli individui a rischio basso e moderato di carcinoma del colon possano essere sottoposti a screening con CTC, mentre i pazienti ad alto rischio dovrebbero essere sottoposti a screening con colonscopia ove possibile.¹¹
 
 **Tabella 1. Tassi di rilevamento dei test di screening per il carcinoma colorettale.**
-
 | Test di screening | Tasso di rilevamento del CRC (%) | Adenomi avanzati (%) |
 |------------------|--------------------------|------------------------------------|
 | CTC | 96 | 67–94 ¹⁰ (> 10 mm); 73–98 ² (> 6 mm) |
@@ -61,13 +60,11 @@ Le indicazioni all'esame CTC variano, ma in generale la CTC viene offerta a pazi
 La CTC svolge un ruolo importante nello screening della neoplasia colorettale. Le linee guida europee raccomandano la CTC come alternativa accettabile alla colonscopia nella popolazione di screening.¹⁹ La US Preventive Services Task Force riferisce che l'accuratezza della CTC è simile a quella della OC per l'identificazione degli adenomi ≥ 6 mm.⁴ La Canadian Association of Gastroenterology supporta la CTC per lo screening dei pazienti a rischio medio in casi selezionati.¹⁰ Il rimborso provinciale varia per quanto riguarda la CTC nel contesto dello screening; tuttavia, laddove la scelta del paziente o le controindicazioni mediche (Tabella 3) giustifichino l'esame, vi è una chiara giustificazione per l'esecuzione della procedura.
 
 **Tabella 2. Indicazioni alla CTC.**
-
 *Screening*
 - Soggetto asintomatico a rischio medio
 - Soggetto asintomatico con anamnesi familiare positiva
 - Soggetto asintomatico con fattori di rischio per la OC
 - Paziente che rifiuta la OC
-
 *Diagnostica*
 - Colonscopia incompleta (in giornata o differita)
 - Risoluzione di problemi (*problem-solving*) a seguito di OC
@@ -108,7 +105,6 @@ I fattori di rischio per la perforazione comprendono l'insufflazione manuale con
 Con i progressi della tecnologia TC, come la ricostruzione iterativa e il minore voltaggio del tubo, sono state riportate dosi efficaci della CTC fino al livello sub-millisievert.³⁴ Il mezzo di contrasto iodato endovenoso non viene tipicamente somministrato per la CTC. Tuttavia, se somministrato, vi è un rischio molto basso di reazioni al mezzo di contrasto iodato (per esempio anafilassi), di danno renale acuto associato al mezzo di contrasto³⁵ e di ipersensibilità.³⁶
 
 **Tabella 3. Controindicazioni alla CTC.**
-
 | Scenario clinico | Commenti |
 |---------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | Colite fulminante; colite acuta sintomatica | Qualsiasi condizione infiammatoria acuta aumenta la propensione alla perforazione. Attendere 4–6 settimane dopo l'episodio acuto. Il rischio di perforazione è basso, riportato pari a 1–5/1000.²⁴ |
@@ -149,7 +145,6 @@ I polipi convenzionali seguono una via adenoma-carcinoma, prestandosi a un progr
 Il 30 %–40 % della popolazione svilupperà un adenoma entro i 60 anni,⁵⁰ e il rischio di sviluppare un carcinoma colorettale aumenta con l'età, in particolare tra i 60 e i 70 anni.⁵¹⁻⁵⁴ Il rischio cumulativo nell'arco della vita di sviluppare un carcinoma è del 5,5 %.⁵⁰ Tuttavia, la storia naturale dei polipi non è sempre prevedibile né graduale, e non tutti gli adenomi colici progrediscono verso la malignità. Il 15 %–20 % dei carcinomi insorge tramite una via alternativa in cui le dimensioni non sono il determinante del rischio.
 
 **Tabella 4. Stratificazione del rischio in base alle dimensioni del polipo.**
-
 | Dimensioni del polipo | Prevalenza (%) | Rischio di istologia avanzata* | Rischio di HGD (displasia di alto grado) | Rischio di carcinoma |
 |-------------------|------------------|-------------------------------|---------------|----------------------------------------|
 | Tutti i polipi ≥ 6 mm | 14 | | | |
@@ -205,7 +200,6 @@ Il colon dovrebbe essere evacuato prima dell'inserimento di una sonda rettale lu
 Nello scenario postoperatorio, la CTC è tecnicamente eseguibile nel contesto di una colostomia (per esempio dopo una resezione addomino-perineale [APR]). Raccomandiamo di inserire il catetere di Foley diversi centimetri oltre la superficie cutanea per evitare il rischio di espulsione del palloncino durante l'insufflazione con CO₂.
 
 **Tabella 5. Risoluzione dei problemi dell'esame CTC.**
-
 | Scenario | Cause | Soluzione |
 |-------------------------------------------------------|--------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | L'aria non insuffla; lo scout mostra aria assente/minima nel colon | Ostruzione della sonda; verificare se l'aria sta fuoriuscendo (sfintere incontinente) | • Controllare la tubatura: è attorcigliata o ostruita? • Gonfiare il palloncino o fissare la tubatura con cerotto |
