@@ -19,7 +19,7 @@ _CORPUS_FILTER_PATTERNS = [
             r"information[\s_]*for[\s_]*patients?|"
             r"patient[\s_]*information|"
             r"informazioni[\s_]*per[\s_]*pazienti|"
-            r"informazioni_per_pazienti",
+            r"informazioni_per_pazienti|"
             r"informativa[\s_]*per[\s_]*pazienti|"
             r"informativa_per_pazienti",
             re.IGNORECASE,
