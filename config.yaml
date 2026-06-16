@@ -19,7 +19,7 @@ dizionario_path: "./dizionario.xlsx"
 index_dir: "./faiss_index"
 
 # Reindex PDFs or not
-reindex: true
+reindex: false
 workers: 8
 
 # Move index to GPU if available
@@ -94,9 +94,9 @@ hf_home: "/fast_disk/models/huggingface"  # "/home/models/HF-Cache"
 
 
 # Interactive options
-chat: true
+chat: false
 
-gradio: false
+gradio: true
 gradio_host: "0.0.0.0"
 gradio_port: 7860
 gradio_share: true

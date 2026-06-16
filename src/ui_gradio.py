@@ -27,7 +27,7 @@ def launch_gradio(cfg: Config):
             return f"Error: {e}", thread_id
 
         config = {"configurable": {"thread_id": thread_id}}
-        agent_input = {"question": quest.en}
+        agent_input = {"question": quest.text}
 
         last_output = None
         for output in agent.stream(agent_input, config=config):
