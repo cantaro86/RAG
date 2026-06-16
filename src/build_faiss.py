@@ -44,8 +44,15 @@ def _detect_lang_safe(text: str) -> str:
 TABLE_RE = re.compile(r"^\|", re.MULTILINE)
 HEADING_RE = re.compile(r"^(#{1,6}) (.+)$", re.MULTILINE)
 SECTION_RE = re.compile(r"^(?=#{1,6} )", re.MULTILINE)
-LIST_ITEM_RE = re.compile(r"^(\d{1,2}[\.\)]\s|\d{1,2}\s(?=[A-Z])|[-•*]\s)")
-CONTINUATION_RE = re.compile(r"^(\d{1,2})[\.\)]?\s(?=[A-Z]|\d)")
+
+LIST_ITEM_RE = re.compile(
+    r"^(?:"
+    r"(?:\*\*)?(?P<num>\d{1,2})(?:\*\*)?(?:[\.\)]\s|\s(?=[A-Z]))|"
+    r"[-•*]\s"
+    r")"
+)
+
+CONTINUATION_RE = re.compile(r"^(?:\*\*)?(?P<num>\d{1,2})(?:\*\*)?(?:[\.\)]\s|\s(?=[A-Z]|\d))")
 
 
 _SPLITTER = RecursiveCharacterTextSplitter(
@@ -61,6 +68,13 @@ _NOSPLIT_SPLITTER = RecursiveCharacterTextSplitter(
     chunk_overlap=0,
     separators=[],
 )
+
+
+def extract_list_number(line: str) -> int | None:
+    m = CONTINUATION_RE.match(line)
+    if not m:
+        return None
+    return int(m.group("num"))
 
 
 def split_block_by_type(block: str) -> list[tuple[str, str]]:
@@ -80,22 +94,21 @@ def split_block_by_type(block: str) -> list[tuple[str, str]]:
         is_table = bool(TABLE_RE.match(line))
 
         if is_heading or is_table:
-            # Always a hard boundary
             commit()
             current_type = "heading" if is_heading else "text"
             current_lines.append(line)
+
         elif is_list_line:
             if current_type != "list":
                 commit()
                 current_type = "list"
             current_lines.append(line)
+
         else:
             if current_type == "list":
-                if line.startswith((" ", "\t")):
-                    # Indented: genuine continuation of a list item
+                if line.startswith((" ", "\t")) or (line.strip() and not is_heading and not is_table):
                     current_lines.append(line)
                 else:
-                    # Non-indented: paragraph after the list, start new text segment
                     commit()
                     current_type = "text"
                     current_lines.append(line)
@@ -291,84 +304,91 @@ def chunk_markdown(md_path: Path) -> list[Document]:
 def merge_continuation_lists(chunks: list[Document]) -> list[Document]:
     """
     Merge list chunks that start at a numbered item > 1 into the most recent
-    preceding numbered list chunk from the same source,
-    but only if that predecessor's last numbered item is n-1.
-    Noise-only list chunks (no numbered items) are skipped during the search.
-    Leading noise lines before a continuation item are moved to the
-    nearest preceding chunk of any type.
+    preceding numbered list chunk from the same source, but only if that
+    predecessor's last numbered item is exactly n-1.
+
+    Noise-only list chunks (with no numbered items) are skipped during the search.
+    Leading noise lines before a continuation item are moved to the nearest
+    preceding chunk of any type.
     """
     result = list(chunks)
-
     i = 0
+
     while i < len(result):
         chunk = result[i]
+
         if chunk.metadata.get("type") != "list":
             i += 1
             continue
 
-        # Scan first 5 lines to find a numbered item
-        # If item 1 is found first → normal list start, not a continuation
         lines = chunk.page_content.splitlines()
         continuation_n = None
         noise_line_count = 0
 
         for idx, line in enumerate(lines[:5]):
-            m = CONTINUATION_RE.match(line)
-            if m:
-                n = int(m.group(1))
-                if n <= 1:
-                    break  # normal list start, abort
-                else:
-                    continuation_n = n
-                    noise_line_count = idx
-                    break
+            n = extract_list_number(line)
+            if n is None:
+                continue
+            if n <= 1:
+                break
+            continuation_n = n
+            noise_line_count = idx
+            break
 
         if continuation_n is None:
             i += 1
             continue
 
-        # Strip leading noise lines and move them to the nearest preceding chunk
         if noise_line_count > 0:
             noise_content = "\n".join(lines[:noise_line_count])
             clean_content = "\n".join(lines[noise_line_count:])
-            result[i] = Document(page_content=clean_content, metadata=chunk.metadata)
+
+            result[i] = Document(
+                page_content=clean_content,
+                metadata=chunk.metadata,
+            )
             chunk = result[i]
-            if i > 0:
+
+            if i > 0 and noise_content.strip():
                 prev = result[i - 1]
                 result[i - 1] = Document(
                     page_content=prev.page_content + "\n" + noise_content,
                     metadata=prev.metadata,
                 )
 
-        # Find the most recent preceding list chunk that has numbered items
         source = chunk.metadata.get("source")
         predecessor_idx = None
+
         for j in range(i - 1, -1, -1):
-            if result[j].metadata.get("type") == "list" and result[j].metadata.get("source") == source:
-                has_numbered = any(CONTINUATION_RE.match(line) for line in result[j].page_content.splitlines())
-                if has_numbered:
-                    predecessor_idx = j
-                    break
-                # else: noise-only list, keep searching backwards
+            prev_chunk = result[j]
+            if prev_chunk.metadata.get("type") != "list":
+                continue
+            if prev_chunk.metadata.get("source") != source:
+                continue
 
-        if predecessor_idx is not None:
-            # Verify predecessor's last numbered item is exactly n-1
-            pred_last_n = None
-            for line in reversed(result[predecessor_idx].page_content.splitlines()):
-                m = CONTINUATION_RE.match(line)
-                if m:
-                    pred_last_n = int(m.group(1))
-                    break
+            has_numbered = any(extract_list_number(line) is not None for line in prev_chunk.page_content.splitlines())
+            if has_numbered:
+                predecessor_idx = j
+                break
 
-            if pred_last_n == continuation_n - 1:
-                merged_content = result[predecessor_idx].page_content + "\n" + chunk.page_content
-                result[predecessor_idx] = Document(
-                    page_content=merged_content,
-                    metadata=result[predecessor_idx].metadata,
-                )
-                result.pop(i)  # remove continuation, don't increment
-            else:
-                i += 1
+        if predecessor_idx is None:
+            i += 1
+            continue
+
+        pred_last_n = None
+        for line in reversed(result[predecessor_idx].page_content.splitlines()):
+            n = extract_list_number(line)
+            if n is not None:
+                pred_last_n = n
+                break
+
+        if pred_last_n == continuation_n - 1:
+            merged_content = result[predecessor_idx].page_content + "\n" + chunk.page_content
+            result[predecessor_idx] = Document(
+                page_content=merged_content,
+                metadata=result[predecessor_idx].metadata,
+            )
+            result.pop(i)
         else:
             i += 1
 
