@@ -20,8 +20,9 @@ class RAGContext:
     topic_continuity_classifier: object
     retriever: object
     rag_chain: object
+    sanitizer_chain: object
     cleaner_chain: object
-    initial_question_rewriter: object
+    pre_retrieval_question_rewriter: object
     question_transformer: object
     synonyms: SynonymStore
 
@@ -64,6 +65,14 @@ def format_history(history: list[dict]):
 # ------------------------
 
 
+def sanitize_question(state: GraphState, sanitizer_chain):
+    logger.debug("--- SANITIZE QUESTION ---")
+    question = state["question"]
+    sanitized = sanitizer_chain.invoke({"question": question})
+    logger.debug(f"Sanitized question: {sanitized}")
+    return {**state, "question": sanitized}
+
+
 def init_first_question(state: GraphState) -> dict:
     hist = state.get("history", [])
     first = len(hist) == 0
@@ -95,7 +104,7 @@ def topic_detector(state, topic_continuity_classifier):
     return {**state, "topic_status": topic}
 
 
-def pre_retrieval_rewriter(state, initial_question_rewriter):
+def pre_retrieval_rewriter(state, pre_retrieval_question_rewriter):
     """
     Resolve ambiguous references in the question before retrieval.
     Runs on followup turns only, using history to make the question self-contained.
@@ -104,7 +113,7 @@ def pre_retrieval_rewriter(state, initial_question_rewriter):
     question = state["question"]
     hist = format_history(state.get("history", []))
 
-    rewritten = initial_question_rewriter.invoke({"question": question, "history": hist})
+    rewritten = pre_retrieval_question_rewriter.invoke({"question": question, "history": hist})
     logger.debug(f"Pre-retrieval rewritten question: {rewritten}")
 
     return {**state, "question": rewritten}
@@ -325,6 +334,8 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow = StateGraph(GraphState)
 
+    workflow.add_node("sanitize_question", partial(sanitize_question, sanitizer_chain=ctx.sanitizer_chain))
+
     workflow.add_node("init_first_question", init_first_question)
 
     workflow.add_node("retrieve_and_filter", partial(retrieve_and_filter, retriever=ctx.retriever))
@@ -348,18 +359,18 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node(
         "pre_retrieval_rewriter",
-        partial(pre_retrieval_rewriter, initial_question_rewriter=ctx.initial_question_rewriter),
+        partial(pre_retrieval_rewriter, pre_retrieval_question_rewriter=ctx.pre_retrieval_question_rewriter),
     )
 
     workflow.add_node("clear_history", clear_history)
 
     workflow.add_node("no_generation", no_generation)
 
-    workflow.add_edge(START, "init_first_question")
+    # EDGES
 
-    workflow.add_edge("clear_history", "retrieve_and_filter")
+    workflow.add_edge(START, "sanitize_question")
 
-    workflow.add_edge("generate_with_docs", "clean_answer")
+    workflow.add_edge("sanitize_question", "init_first_question")
 
     workflow.add_conditional_edges(
         "init_first_question",
@@ -379,6 +390,10 @@ def build_agent_graph(ctx: RAGContext):
         },
     )
 
+    workflow.add_edge("clear_history", "retrieve_and_filter")
+
+    workflow.add_edge("pre_retrieval_rewriter", "retrieve_and_filter")
+
     workflow.add_conditional_edges(
         "retrieve_and_filter",
         decide_relevance,
@@ -389,13 +404,13 @@ def build_agent_graph(ctx: RAGContext):
         },
     )
 
-    workflow.add_edge("pre_retrieval_rewriter", "retrieve_and_filter")
-
-    workflow.add_edge("no_generation", END)
-
     workflow.add_edge("transform_query", "retrieve_and_filter")
 
+    workflow.add_edge("generate_with_docs", "clean_answer")
+
     workflow.add_edge("clean_answer", END)
+
+    workflow.add_edge("no_generation", END)
 
     agent = workflow.compile(checkpointer=checkpointer)
     return agent

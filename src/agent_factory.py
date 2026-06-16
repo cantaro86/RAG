@@ -6,6 +6,7 @@ from src.agent_prompts import (
     prompt_clean_chat,
     prompt_rag,
     prompt_rewrite_medical,
+    prompt_sanitizer,
     prompt_topic,
     prompt_transform_query,
 )
@@ -45,25 +46,27 @@ def build_rag_agent(cfg: Config):
     llm_cleaner = llm.bind(
         repetition_penalty=1.0, temperature=1.0, no_repeat_ngram_size=0, top_p=1.0, top_k=50, do_sample=False
     )
+    llm_sanitizer_model = llm_cleaner
+
     # with do_sample=False the temperature, top_p and top_k are ignored, but we set them to default values for clarity
-
     llm_topic_classifier = llm.bind(temperature=1.0, top_p=1.0, top_k=50, do_sample=False, max_new_tokens=5)
-
     llm_rewriter_bound = llm.bind(temperature=0.1, top_p=0.95, top_k=50, do_sample=True)
 
-    # Extract messages from ChatPromptValue, then invoke
-    llm_runnable = RunnableLambda(lambda prompt_value: llm.invoke(prompt_value.to_messages())["content"])
+    def invoke_prompt_value(prompt_value, model):
+        messages = prompt_value if isinstance(prompt_value, list) else prompt_value.to_messages()
+        return model.invoke(messages)["content"]
 
-    llm_messages = RunnableLambda(lambda prompt_value: llm_cleaner.invoke(prompt_value.to_messages())["content"])
-
-    llm_rewriter = RunnableLambda(lambda prompt_value: llm_rewriter_bound.invoke(prompt_value.to_messages())["content"])
-
-    llm_topic = RunnableLambda(lambda prompt_value: llm_topic_classifier.invoke(prompt_value.to_messages())["content"])
+    llm_runnable = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm))
+    llm_sanitizer = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_sanitizer_model))
+    llm_messages = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_cleaner))
+    llm_rewriter = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_rewriter_bound))
+    llm_topic = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_topic_classifier))
 
     topic_continuity_classifier = prompt_topic | llm_topic | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()
+    sanitizer_chain = prompt_sanitizer | llm_sanitizer | StrOutputParser()
     cleaner_chain = prompt_clean_chat | llm_messages | StrOutputParser()
-    initial_question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
+    pre_retrieval_question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
     question_transformer = prompt_transform_query | llm_rewriter | StrOutputParser()
 
     # Load the synonym store
@@ -73,8 +76,9 @@ def build_rag_agent(cfg: Config):
         topic_continuity_classifier=topic_continuity_classifier,
         retriever=retriever,
         rag_chain=rag_chain,
+        sanitizer_chain=sanitizer_chain,
         cleaner_chain=cleaner_chain,
-        initial_question_rewriter=initial_question_rewriter,
+        pre_retrieval_question_rewriter=pre_retrieval_question_rewriter,
         question_transformer=question_transformer,
         synonyms=synonyms,
     )
