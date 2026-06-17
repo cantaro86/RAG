@@ -64,7 +64,7 @@ threshold: 0.1  # reranker threshold
 # to get probability use: torch.sigmoid(torch.tensor([-3, -2, -1, 0, 1, 2, 3]))
 
 
-clean_answer: true
+clean_answer: false
 
 # Chunking
 chunk_size: 1200           # number of characters
@@ -94,9 +94,9 @@ hf_home: "/fast_disk/models/huggingface"  # "/home/models/HF-Cache"
 
 
 # Interactive options
-chat: false
+chat: true
 
-gradio: true
+gradio: false
 gradio_host: "0.0.0.0"
 gradio_port: 7860
 gradio_share: true

@@ -213,20 +213,25 @@ prompt_transform_query = ChatPromptTemplate.from_messages(
             "system",
             """ Sei un riscrittore di domande per un sistema di recupero di informazioni mediche.
 
-Compito: La domanda seguente non è riuscita a recuperare i documenti pertinenti.
-Riformulala per migliorare il recupero, senza modificarne il significato.
+            Contesto del dominio: esame Colon-TC
 
-Istruzioni:
-1. Espandi o varia la terminologia medica se utile al recupero.
+            Compito: La domanda seguente non è riuscita a recuperare i documenti pertinenti.
+            Riformulala per migliorare il recupero, senza modificarne il significato.
 
-2. Usa i sinonimi forniti solo se sono pertinenti ai termini già presenti nella domanda.
+            Istruzioni:
+            1. Espandi o varia la terminologia medica se utile al recupero.
 
-3. Se la domanda è complessa, concentrati sull'aspetto più specifico e recuperabile.
+            2. Esplicita il contesto "esame Colon-TC" quando la domanda implicitamente riguarda
+            la preparazione all'esame o le istruzioni per l'esame.
 
-4. Non rispondere alla domanda e non aggiungere nuove informazioni mediche.
+            3. Usa i sinonimi forniti solo se sono pertinenti ai termini già presenti nella domanda.
 
-5. Genera SOLO la domanda riscritta.
-""",
+            4. Se la domanda è complessa, concentrati sull'aspetto più specifico e recuperabile.
+
+            5. Non rispondere alla domanda e non aggiungere nuove informazioni mediche.
+
+            6. Genera SOLO la domanda riscritta.
+            """,
         ),
         (
             "user",

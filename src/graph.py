@@ -76,6 +76,7 @@ def sanitize_question(state: GraphState, sanitizer_chain):
 def init_first_question(state: GraphState) -> dict:
     hist = state.get("history", [])
     first = len(hist) == 0
+    logger.debug(f"--- INIT FIRST QUESTION ---\nFirst question: {first}")
     return {
         **state,
         "first_question": first,
