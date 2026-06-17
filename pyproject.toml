@@ -1,7 +1,7 @@
 [project]
-name = "rag_pdf"
+name = "agentic_rag"
 version = "0.1.0"
-description = "RAG PDF retrieval and LLM pipeline using LangChain"
+description = "Medical Agentic RAG retrieval and LLM pipeline using LangChain"
 authors = [
     { name = "Nicola Cantarutti", email = "nicola.cantarutti@uniud.it" }
 ]

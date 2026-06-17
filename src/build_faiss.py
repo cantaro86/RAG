@@ -82,6 +82,7 @@ def split_block_by_type(block: str) -> list[tuple[str, str]]:
     segments = []
     current_type = None
     current_lines = []
+    pending_intro = None  # last text line ending with ":" to attach to next list
 
     def commit():
         if current_lines:
@@ -94,19 +95,30 @@ def split_block_by_type(block: str) -> list[tuple[str, str]]:
         is_table = bool(TABLE_RE.match(line))
 
         if is_heading or is_table:
+            pending_intro = None
             commit()
             current_type = "heading" if is_heading else "text"
             current_lines.append(line)
 
         elif is_list_line:
-            if current_type != "list":
+            if current_type == "list":
+                # continuing same list
+                current_lines.append(line)
+            else:
+                # new list starts: first commit whatever was open
+                # but strip the last text line if it is an intro for this list
+                if current_type == "text" and current_lines and current_lines[-1].rstrip().endswith(":"):
+                    pending_intro = current_lines.pop(-1)
                 commit()
                 current_type = "list"
-            current_lines.append(line)
+                if pending_intro is not None:
+                    current_lines.append(pending_intro)
+                    pending_intro = None
+                current_lines.append(line)
 
         else:
             if current_type == "list":
-                if line.startswith((" ", "\t")) or (line.strip() and not is_heading and not is_table):
+                if line.startswith((" ", "\t")):
                     current_lines.append(line)
                 else:
                     commit()
