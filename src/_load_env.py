@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 logging.getLogger("transformers.pipelines.base").setLevel(logging.ERROR)
-# logging.getLogger("transformers").setLevel(logging.ERROR)
+
 
 # Patch numpy.array for fasttext NumPy 2.x compatibility
 _original_array = np.array
@@ -89,6 +89,9 @@ if getattr(cfg, "hf_home", None):
 
 if getattr(cfg, "debugger", False):
     os.environ["DEBUG_MODE"] = "1"
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
 
 
 def attach_debugger_if_requested():
