@@ -10,7 +10,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from rich.console import Console
 
-import _load_env  # noqa: F401
+import src.agentic_rag._load_env  # noqa: F401
 
 console = Console()
 
