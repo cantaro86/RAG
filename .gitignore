@@ -22,6 +22,7 @@ docs
 faiss_index
 notebooks_RAG
 temp_images
+notebooks
 
 python-venv
 
