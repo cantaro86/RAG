@@ -9,8 +9,8 @@ from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from sentence_transformers import CrossEncoder
 
-from src._load_env import DEVICE
-from src.loggers import Logger
+from agentic_rag._load_env import DEVICE
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

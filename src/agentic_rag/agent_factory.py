@@ -1,8 +1,8 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
-from src._load_env import Config
-from src.agent_prompts import (
+from agentic_rag._load_env import Config
+from agentic_rag.agent_prompts import (
     prompt_clean_chat,
     prompt_rag,
     prompt_rewrite_medical,
@@ -10,11 +10,11 @@ from src.agent_prompts import (
     prompt_topic,
     prompt_transform_query,
 )
-from src.build_faiss import load_vectorstore
-from src.dizionario import SynonymStore
-from src.graph import RAGContext, build_agent_graph
-from src.llm_build import build_llm_pipe
-from src.retriever import build_retriever
+from agentic_rag.build_faiss import load_vectorstore
+from agentic_rag.dizionario import SynonymStore
+from agentic_rag.graph import RAGContext, build_agent_graph
+from agentic_rag.llm_build import build_llm_pipe
+from agentic_rag.retriever import build_retriever
 
 
 def build_rag_agent(cfg: Config):

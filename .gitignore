@@ -23,7 +23,7 @@ faiss_index
 notebooks_RAG
 temp_images
 
-
+python-venv
 
 basic_app.py
 demo_rag.py

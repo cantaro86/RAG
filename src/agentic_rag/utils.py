@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 from rich.console import Console
 from rich.table import Table as RichTable
 
-from src.loggers import Logger
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

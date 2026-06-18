@@ -2,15 +2,15 @@ import os
 import sys
 import traceback
 
-import src._load_env as _  # noqa: F401  # isort: skip
-from src._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
+import agentic_rag._load_env as _  # noqa: F401  # isort: skip
+from agentic_rag._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
 from rich.markup import escape
 
-from src.agent_factory import build_rag_agent
-from src.build_faiss import build_faiss_index
-from src.detect_language import DetectLanguage
-from src.loggers import Logger
-from src.ui_gradio import launch_gradio
+from agentic_rag.agent_factory import build_rag_agent
+from agentic_rag.build_faiss import build_faiss_index
+from agentic_rag.detect_language import DetectLanguage
+from agentic_rag.loggers import Logger
+from agentic_rag.ui_gradio import launch_gradio
 
 logger = Logger.get_logger(__name__)
 

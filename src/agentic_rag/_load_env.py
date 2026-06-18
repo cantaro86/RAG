@@ -50,8 +50,8 @@ DEVICE = "mps" if USE_MPS else ("cuda" if torch.cuda.is_available() else "cpu")
 
 
 class Config:
-    def __init__(self, path="config.yaml"):
-        with open(path, "r") as f:
+    def __init__(self, path: Path):
+        with path.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         for k, v in data.items():
             setattr(self, k, v)
@@ -68,10 +68,13 @@ class Config:
             )
 
 
-config_path = Path(__file__).resolve().parents[1] / "config.yaml"
-cfg = Config(str(config_path))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+DOTENV_PATH = PROJECT_ROOT / ".env"
 
-load_dotenv()
+cfg = Config(CONFIG_PATH)
+load_dotenv(dotenv_path=DOTENV_PATH)
+
 
 if not os.environ.get("HF_TOKEN"):
     console.print(

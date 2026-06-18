@@ -7,8 +7,8 @@ from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMo
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from tqdm import tqdm
 
-from src._load_env import console
-from src.loggers import Logger
+from agentic_rag._load_env import console
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

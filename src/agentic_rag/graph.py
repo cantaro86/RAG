@@ -6,11 +6,11 @@ from functools import partial
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from src._load_env import cfg
-from src.dizionario import SynonymStore
-from src.loggers import Logger
-from src.state import GraphState
-from src.utils import extract_source_filter, print_sources, render_context
+from agentic_rag._load_env import cfg
+from agentic_rag.dizionario import SynonymStore
+from agentic_rag.loggers import Logger
+from agentic_rag.state import GraphState
+from agentic_rag.utils import extract_source_filter, print_sources, render_context
 
 logger = Logger.get_logger(__name__)
 

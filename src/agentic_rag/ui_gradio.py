@@ -2,10 +2,10 @@ import uuid
 
 import gradio as gr
 
-from src._load_env import Config, attach_debugger_if_requested
-from src.agent_factory import build_rag_agent
-from src.detect_language import DetectLanguage
-from src.loggers import Logger
+from agentic_rag._load_env import Config, attach_debugger_if_requested
+from agentic_rag.agent_factory import build_rag_agent
+from agentic_rag.detect_language import DetectLanguage
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

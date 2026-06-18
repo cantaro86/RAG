@@ -4,8 +4,8 @@ import torch
 from langchain_huggingface import HuggingFacePipeline
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer, pipeline
 
-from src._load_env import DEVICE, ONLINE, cfg, console
-from src.loggers import Logger
+from agentic_rag._load_env import DEVICE, ONLINE, cfg, console
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

@@ -1,7 +1,52 @@
 # RAG for PDF
 
 
-##### Debugging
+### Installation instructions:
+
+Virtual environment:
+```bash
+module load python 3.12
+python -m venv --prompt RAG ./python-venv
+source ./python-venv/bin/activate
+```
+
+Install the package:
+```bash
+python -m pip install --upgrade pip
+
+python -m pip install -e .
+# or for developers
+python -m pip install -e ".[dev]"
+```
+
+Cluster allocation:
+```bash
+salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
+```
+
+Run it inside the SLURM interactive allocation with
+```bash
+agentic_rag
+```
+
+Or as a SBATCH script with a gradio web interface:
+```bash
+sbatch rag_gradio.sbatch
+```
+
+Do not run this:
+```bash
+python src/agentic_rag/cli.py
+```
+
+If you do not want to install the package, you can run the program with:
+
+```bash
+PYTHONPATH=src python -m agentic_rag
+```
+
+
+#### Debugging
 
 ```bash
 module load conda
@@ -22,15 +67,6 @@ ssh -N -L 5643:dgx01:5643 dgx01
 ![AI AGENT](graph.png)
 
 
-pip install fasttext
-pip install langdetect
-
-python3 -m pip install --upgrade pip setuptools wheel
-python3 -m pip install sentencepiece
-pip install sacremoses
-pip install bitsandbytes
-pip install mlx mlx-lm
-
 
 
 We use faiss-cpu, but if we really want faiss gpu we can:
@@ -38,14 +74,10 @@ conda install -c pytorch -c nvidia faiss-gpu=1.8.0  # H100 compatible
 This one installs numpy-base which is a numpy version 1.26.4 of conda. This may create conflicts.
 
 
-conda install -c conda-forge tesseract
-tesseract --list-langs
-export TESSDATA_PREFIX="$CONDA_PREFIX/share"
-
 
 pip install -r requirements.txt --no-cache
 
 
 
-OLD TRANSLATION VERSION
+##### OLD TRANSLATION VERSION
 check the branch inglese

@@ -14,9 +14,9 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 
-from src._load_env import DEVICE, ONLINE, Config, cfg, console
-from src.loggers import Logger
-from src.utils import _normalize
+from agentic_rag._load_env import DEVICE, ONLINE, Config, cfg, console
+from agentic_rag.loggers import Logger
+from agentic_rag.utils import _normalize
 
 logger = Logger.get_logger(__name__)
 

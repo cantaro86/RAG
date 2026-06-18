@@ -6,7 +6,7 @@ from threading import RLock
 
 import pandas as pd
 
-from src.loggers import Logger
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

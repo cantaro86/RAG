@@ -5,7 +5,7 @@ import urllib
 import fasttext
 from langdetect import detect_langs
 
-from src.loggers import Logger
+from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 

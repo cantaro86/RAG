@@ -2,7 +2,7 @@ import logging
 import sys
 from logging.handlers import TimedRotatingFileHandler
 
-from src._load_env import cfg
+from agentic_rag._load_env import cfg
 
 
 class Logger:

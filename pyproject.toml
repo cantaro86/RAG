@@ -5,16 +5,38 @@ description = "Medical Agentic RAG retrieval and LLM pipeline using LangChain"
 authors = [
     { name = "Nicola Cantarutti", email = "nicola.cantarutti@uniud.it" }
 ]
+readme = "README.md"
+requires-python = ">=3.12"
 dependencies = [
-    "langchain>=0.1.0",
-    "faiss-cpu>=1.7.4",
-    "torch>=2.0.0",
-    "tqdm",
+    "accelerate",
+    "bitsandbytes; sys_platform != 'darwin'",
+    "build",
+    "faiss-cpu",
+    "fasttext",
+    "gradio",
+    "langchain==1.2.10",
+    "langchain_community==0.4.1",
+    "langchain_core==1.2.13",
+    "langchain_huggingface==1.2.0",
+    "langchain_text_splitters==1.1.0",
+    "langdetect",
+    "langgraph==1.0.8",
+    "numpy>=2.4.0",
+    "openpyxl",
+    "pymupdf",
+    "pyyaml",
     "rich",
-    "sentence-transformers",
-    "transformers",
-    "pytest",
+    "sacremoses",
+    "scipy",
+    "sentence_transformers",
+    "sentencepiece",
+    "torch>=2.9.0",
+    "tqdm",
+    "transformers>=4.57.1",
+    "mlx; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-lm; sys_platform == 'darwin' and platform_machine == 'arm64'",
 ]
+
 
 [project.optional-dependencies]
 dev = [
@@ -22,11 +44,27 @@ dev = [
     "coverage",
     "tox",
     "pre-commit",
+    "pytest",
+    "jupyter",
+    "debugpy",
 ]
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=65", "wheel"]
 build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false  # prevent folders without __init__.py from being scanned
+
+
+[project.scripts]
+agentic_rag = "agentic_rag.cli:main"
+
 
 [tool.ruff]
 line-length = 120
@@ -38,4 +76,4 @@ ignore = ["UP015"]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-per-file-ignores = { "rag_pdf_langchain.py" = ["I001"] }
+per-file-ignores = { "src/agentic_rag/cli.py" = ["I001"] }
