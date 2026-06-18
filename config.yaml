@@ -94,12 +94,12 @@ hf_home: "/fast_disk/models/huggingface"  # "/home/models/HF-Cache"
 
 
 # Interactive options
-chat: true
+chat: false
 
-gradio: false
+gradio: true
 gradio_host: "0.0.0.0"
 gradio_port: 7860
-gradio_share: true
+gradio_share: false
 
 
 max_history_turns: 6  # Number of Q&A pairs to remember

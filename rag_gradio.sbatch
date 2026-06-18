@@ -13,8 +13,6 @@
 module load conda
 eval "$(conda shell.bash hook)"
 conda activate RAG
-
-
 set -euo pipefail
 
 PORT=7860
@@ -34,9 +32,10 @@ echo
 echo "3) Open on laptop: http://localhost:7861"
 echo
 
-# Recommended: don't expose Gradio beyond the compute node
+cd "${SLURM_SUBMIT_DIR:-$PWD}"
+
 export GRADIO_SERVER_NAME=127.0.0.1
-export GRADIO_SERVER_PORT=${PORT}
+export GRADIO_SERVER_PORT=$PORT
 
 # Check and set config.yaml parameters
 if ! grep -q "^gradio: true$" config.yaml; then
@@ -46,5 +45,10 @@ if ! grep -q "^chat: false$" config.yaml; then
     sed -i 's/^chat: .*/chat: false/' config.yaml
 fi
 
-# The -u flag stands for "unbuffered"
-python -u main.py
+python -u main.py &
+APP_PID=$!
+python cloudflare_wait.py "$PORT" &
+TUNNEL_PID=$!
+
+trap 'kill $TUNNEL_PID $APP_PID 2>/dev/null || true' EXIT INT TERM
+wait $APP_PID
