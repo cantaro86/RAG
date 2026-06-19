@@ -42,7 +42,6 @@ dependencies = [
 dev = [
     "ruff",
     "coverage",
-    "tox",
     "pre-commit",
     "pytest",
     "jupyter",
