@@ -78,3 +78,10 @@ fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 per-file-ignores = { "src/agentic_rag/cli.py" = ["I001"] }
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# addopts = "-v --tb=short"
+addopts = "-q --tb=no"

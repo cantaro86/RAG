@@ -12,6 +12,8 @@ jupyter.sbatch
 
 *log
 *ipynb*
+*.err
+*.out
 
 Colon-TC
 Colon-TC_*
@@ -23,6 +25,8 @@ faiss_index
 notebooks_RAG
 temp_images
 notebooks
+src/agentic_rag/__pycache__
+src/agentic_rag.egg-info
 
 python-venv
 
