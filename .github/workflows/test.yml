@@ -34,7 +34,7 @@ jobs:
           pip install -e ".[dev]"
 
       - name: Run tests
-        run: pytest
+        run: pytest -m cpu
 
       - name: Save virtual environment to cache
         if: steps.cache-pip.outputs.cache-hit != 'true'

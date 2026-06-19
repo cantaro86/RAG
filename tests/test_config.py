@@ -15,6 +15,8 @@ from agentic_rag.config_schema import Config, load_config
 
 from .helpers import make_valid_config, write_yaml
 
+pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
+
 
 def test_config_file_exists(config_path: Path) -> None:
     """Verify that config.yaml is present at the expected project root location."""

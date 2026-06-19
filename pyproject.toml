@@ -87,3 +87,7 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-v --tb=short"
 # addopts = "-q --tb=no"
+markers = [
+    "cpu: tests that run on CPU only",
+    "gpu: tests that require GPU",
+]
