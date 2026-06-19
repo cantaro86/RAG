@@ -86,5 +86,5 @@ per-file-ignores = { "src/agentic_rag/cli.py" = ["I001"] }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-# addopts = "-v --tb=short"
-addopts = "-q --tb=no"
+addopts = "-v --tb=short"
+# addopts = "-q --tb=no"

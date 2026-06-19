@@ -3,7 +3,8 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
-import yaml
+
+from agentic_rag.config_schema import Config, load_config
 
 
 @pytest.fixture(scope="session")
@@ -19,27 +20,8 @@ def config_path(project_root: Path) -> Path:
 
 
 @pytest.fixture(scope="session")
-def config_data(config_path: Path) -> dict:
-    """Load config.yaml once and return its parsed contents.
-
-    Skip dependent tests if the configuration file is missing.
-    """
-    if not config_path.exists():
-        pytest.skip(f"config.yaml not found: {config_path}")
-
-    if not config_path.is_file():
-        pytest.skip(f"config.yaml is not a regular file: {config_path}")
-
-    with config_path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    if data is None:
-        pytest.fail(f"config.yaml is empty: {config_path}")
-
-    if not isinstance(data, dict):
-        pytest.fail(f"config.yaml must contain a top-level mapping: {config_path}")
-
-    return data
+def config_data(config_path: Path) -> Config:
+    return load_config(config_path)
 
 
 @pytest.fixture

@@ -5,9 +5,10 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import yaml
 from dotenv import load_dotenv
 from rich.console import Console
+
+from agentic_rag.config_schema import load_config
 
 logging.getLogger("transformers.pipelines.base").setLevel(logging.ERROR)
 
@@ -48,31 +49,11 @@ console = Console(record=True, width=120, force_terminal=True)
 USE_MPS = torch.backends.mps.is_available()
 DEVICE = "mps" if USE_MPS else ("cuda" if torch.cuda.is_available() else "cpu")
 
-
-class Config:
-    def __init__(self, path: Path):
-        with path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        for k, v in data.items():
-            setattr(self, k, v)
-
-        self._validate_ui_mode()
-
-    def _validate_ui_mode(self):
-        chat = getattr(self, "chat", False)
-        gradio = getattr(self, "gradio", False)
-
-        if chat and gradio:
-            raise ValueError(
-                "Configuration error: 'chat' and 'gradio' are mutually exclusive. Set only one to true in config.yaml"
-            )
-
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 DOTENV_PATH = PROJECT_ROOT / ".env"
 
-cfg = Config(CONFIG_PATH)
+cfg = load_config(CONFIG_PATH)
 load_dotenv(dotenv_path=DOTENV_PATH)
 
 

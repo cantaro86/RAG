@@ -3,7 +3,8 @@ import sys
 import traceback
 
 import agentic_rag._load_env as _  # noqa: F401  # isort: skip
-from agentic_rag._load_env import Config, cfg, console, ONLINE  # noqa: F401  # isort: skip
+from agentic_rag.config_schema import Config
+from agentic_rag._load_env import cfg, console, ONLINE  # noqa: F401  # isort: skip
 from rich.markup import escape
 
 from agentic_rag.agent_factory import build_rag_agent

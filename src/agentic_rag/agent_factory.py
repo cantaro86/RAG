@@ -1,7 +1,6 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
-from agentic_rag._load_env import Config
 from agentic_rag.agent_prompts import (
     prompt_clean_chat,
     prompt_rag,
@@ -11,6 +10,7 @@ from agentic_rag.agent_prompts import (
     prompt_transform_query,
 )
 from agentic_rag.build_faiss import load_vectorstore
+from agentic_rag.config_schema import Config
 from agentic_rag.dizionario import SynonymStore
 from agentic_rag.graph import RAGContext, build_agent_graph
 from agentic_rag.llm_build import build_llm_pipe

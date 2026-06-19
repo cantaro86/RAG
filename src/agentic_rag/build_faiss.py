@@ -14,7 +14,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 
-from agentic_rag._load_env import DEVICE, ONLINE, Config, cfg, console
+from agentic_rag._load_env import DEVICE, ONLINE, cfg, console
+from agentic_rag.config_schema import Config
 from agentic_rag.loggers import Logger
 from agentic_rag.utils import _normalize
 
