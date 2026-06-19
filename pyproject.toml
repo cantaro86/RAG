@@ -1,6 +1,6 @@
 [project]
 name = "agentic_rag"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Medical Agentic RAG retrieval and LLM pipeline using LangChain"
 authors = [
     { name = "Nicola Cantarutti", email = "nicola.cantarutti@uniud.it" }
@@ -51,8 +51,11 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools>=65", "wheel"]
+requires = ["setuptools>=65", "wheel", "setuptools-scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools_scm]
+version_file = "src/agentic_rag/_version.py"
 
 
 [tool.setuptools]

@@ -28,6 +28,8 @@ notebooks
 src/agentic_rag/__pycache__
 src/agentic_rag.egg-info
 
+src/agentic_rag/_version.py 
+
 python-venv
 
 basic_app.py
