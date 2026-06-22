@@ -54,6 +54,22 @@ def test_load_config_raises_validation_error_when_required_key_is_missing(
     )
 
 
+def test_load_config_raises_for_extra_unknown_key(tmp_path: Path) -> None:
+    """Verify that unknown config keys raise a ValidationError."""
+    path = tmp_path / "config.yaml"
+    data = make_valid_config()
+    data["unexpected_key"] = "unexpected_value"
+    write_yaml(path, data)
+
+    with pytest.raises(ValidationError) as exc_info:
+        load_config(path)
+
+    errors = exc_info.value.errors()
+    assert any(err["loc"] == ("unexpected_key",) and err["type"] == "extra_forbidden" for err in errors), (
+        f"Expected extra-field error for 'unexpected_key', got: {errors}"
+    )
+
+
 def test_load_config_raises_for_missing_file(tmp_path) -> None:
     """Verify that loading a missing config file raises FileNotFoundError."""
     missing = tmp_path / "config.yaml"
