@@ -67,9 +67,18 @@ if not os.environ.get("HF_TOKEN"):
 
 
 # Set HuggingFace cache dir
-if getattr(cfg, "hf_home", None):
-    os.makedirs(cfg.hf_home, exist_ok=True)
-    os.environ["HF_HOME"] = cfg.hf_home
+hf_home = getattr(cfg, "hf_home", None)
+if hf_home:
+    try:
+        os.makedirs(hf_home, exist_ok=True)
+    except OSError:
+        fallback_hf_home = str(Path.home() / ".cache" / "huggingface")
+        console.print(f"[yellow]Warning:[/yellow] Cannot use hf_home='{hf_home}', falling back to '{fallback_hf_home}'")
+        os.makedirs(fallback_hf_home, exist_ok=True)
+        hf_home = fallback_hf_home
+
+    os.environ["HF_HOME"] = hf_home
+
 
 if getattr(cfg, "debugger", False):
     os.environ["DEBUG_MODE"] = "1"
