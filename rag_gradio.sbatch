@@ -32,22 +32,24 @@ echo
 echo "3) Open on laptop: http://localhost:7861"
 echo
 
-cd "${SLURM_SUBMIT_DIR:-$PWD}"
+JOB_SCRIPT=$(scontrol show job ${SLURM_JOB_ID} | awk -F= '/Command=/{print $2}')
+SCRIPT_DIR=$(dirname ${JOB_SCRIPT})
 
+export PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH:-}"
 export GRADIO_SERVER_NAME=127.0.0.1
 export GRADIO_SERVER_PORT=$PORT
 
 # Check and set config.yaml parameters
-if ! grep -q "^gradio: true$" config.yaml; then
-    sed -i 's/^gradio: .*/gradio: true/' config.yaml
+if ! grep -q "^gradio: true$" ${SCRIPT_DIR}/config.yaml; then
+    sed -i 's/^gradio: .*/gradio: true/' ${SCRIPT_DIR}/config.yaml
 fi
-if ! grep -q "^chat: false$" config.yaml; then
-    sed -i 's/^chat: .*/chat: false/' config.yaml
+if ! grep -q "^chat: false$" ${SCRIPT_DIR}/config.yaml; then
+    sed -i 's/^chat: .*/chat: false/' ${SCRIPT_DIR}/config.yaml
 fi
 
-python -u main.py &
+python -u -m agentic_rag &
 APP_PID=$!
-python cloudflare_wait.py "$PORT" &
+python "$SCRIPT_DIR/utils/cloudflare_wait.py" "$PORT" &
 TUNNEL_PID=$!
 
 trap 'kill $TUNNEL_PID $APP_PID 2>/dev/null || true' EXIT INT TERM
