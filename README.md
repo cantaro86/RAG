@@ -46,6 +46,24 @@ PYTHONPATH=src python -m agentic_rag
 ```
 
 
+#### Spack
+
+module load spack
+spacktivate RAG
+spack install py-agentic-rag
+
+```bash
+spack repo add ./spack-repo
+
+spack install --add py-agentic-rag +cuda cuda_arch=90
+
+spack spec py-torch+cuda cuda_arch=90 %gcc@14.2.0 ^cuda@12.8^C
+
+spack spec py-agentic-rag +cuda cuda_arch=90
+```
+
+
+
 #### Debugging
 
 ```bash
