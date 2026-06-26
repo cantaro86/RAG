@@ -15,6 +15,8 @@ from agentic_rag.config_schema import Config, load_config
 
 from .helpers import make_valid_config, write_yaml
 
+pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
+
 
 def test_config_file_exists(config_path: Path) -> None:
     """Verify that config.yaml is present at the expected project root location."""
@@ -49,6 +51,22 @@ def test_load_config_raises_validation_error_when_required_key_is_missing(
     errors = exc_info.value.errors()
     assert any(err["loc"] == (missing_key,) and err["type"] == "missing" for err in errors), (
         f"Expected missing-field error for '{missing_key}', got: {errors}"
+    )
+
+
+def test_load_config_raises_for_extra_unknown_key(tmp_path: Path) -> None:
+    """Verify that unknown config keys raise a ValidationError."""
+    path = tmp_path / "config.yaml"
+    data = make_valid_config()
+    data["unexpected_key"] = "unexpected_value"
+    write_yaml(path, data)
+
+    with pytest.raises(ValidationError) as exc_info:
+        load_config(path)
+
+    errors = exc_info.value.errors()
+    assert any(err["loc"] == ("unexpected_key",) and err["type"] == "extra_forbidden" for err in errors), (
+        f"Expected extra-field error for 'unexpected_key', got: {errors}"
     )
 
 

@@ -2,10 +2,12 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     log_to_file: bool
     log_file: str
@@ -59,6 +61,7 @@ class Config(BaseModel):
 
     @model_validator(mode="after")
     def validate_cross_fields(self):
+        """Validate relationships between multiple configuration fields."""
         if self.chat and self.gradio:
             raise ValueError("'chat' and 'gradio' cannot both be true")
         if self.k_reranked > self.k:
@@ -69,13 +72,20 @@ class Config(BaseModel):
 
 
 def load_config(path: Path) -> Config:
+    """Load, parse, and validate config.yaml."""
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
+
+    if not path.is_file():
+        raise FileNotFoundError(f"Configuration path is not a regular file: {path}")
 
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if data is None:
         raise ValueError(f"Configuration file is empty: {path}")
+
+    if not isinstance(data, dict):
+        raise TypeError(f"Configuration file must contain a top-level mapping: {path}")
 
     return Config.model_validate(data)

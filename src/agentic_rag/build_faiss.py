@@ -203,8 +203,19 @@ def chunk_markdown(md_path: Path) -> list[Document]:
         if section_key in SKIP_SECTIONS:
             continue
 
+        # ── NOSPLIT: emit the entire section as a single chunk ───────────
+        if section_key in NOSPLIT_SECTIONS:
+            chunks.append(
+                Document(
+                    page_content=section.strip(),
+                    metadata=_make_metadata(md_path.name, current_section, doc_lang, type="recomm"),
+                )
+            )
+            carried_heading = ""  # reset, nothing is pending
+            continue
+        # ─────────────────────────────────────────────────────────────────
+
         active_splitter = _NOSPLIT_SPLITTER if section_key in NOSPLIT_SECTIONS else _SPLITTER
-        # ─────────────────────────────────────────────────────────
 
         blocks = [b.strip() for b in re.split(r"\n{2,}", section) if b.strip()]
         pending_text: list[str] = []

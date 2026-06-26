@@ -1,0 +1,46 @@
+# .github/workflows/test.yml
+name: test
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache Python dependencies
+        id: cache-pip
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('**/.github/workflows/*.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}-
+            ${{ runner.os }}-pip-
+
+      - name: Install package with dev dependencies
+        if: steps.cache-pip.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: pytest -m cpu
+
+      - name: Save virtual environment to cache
+        if: steps.cache-pip.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ steps.cache-pip.outputs.cache-key }}
