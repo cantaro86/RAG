@@ -41,13 +41,11 @@ class PyAgenticRag(PythonPackage, CudaPackage):
     depends_on("py-langgraph", type=("build", "run"))
     depends_on("py-numpy@2.4.0:", type=("build", "run"))
     depends_on("py-openpyxl", type=("build", "run"))
-    # depends_on("py-pymupdf",                            type=("build", "run"))       ############
     depends_on("py-pyyaml", type=("build", "run"))
     depends_on("py-rich", type=("build", "run"))
     depends_on("py-sacremoses", type=("build", "run"))
     depends_on("py-scipy", type=("build", "run"))
     # depends_on("py-sentence-transformers",              type=("build", "run"))
-    # depends_on("py-sentencepiece",                      type=("build", "run"))       ############
     depends_on("py-tqdm", type=("build", "run"))
     depends_on("py-transformers@4.57.0:", type=("build", "run"))
 

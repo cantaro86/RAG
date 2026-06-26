@@ -1,4 +1,15 @@
-# RAG for PDF
+# RAG
+
+[![Build](https://github.com/cantaro86/RAG/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/cantaro86/RAG/actions/workflows/build.yml)
+[![Tests](https://github.com/cantaro86/RAG/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/cantaro86/RAG/actions/workflows/test.yml)
+[![Pre-commit](https://github.com/cantaro86/RAG/actions/workflows/pre-commit.yml/badge.svg?branch=main)](https://github.com/cantaro86/RAG/actions/workflows/pre-commit.yml)
+[![Top language](https://img.shields.io/github/languages/top/cantaro86/RAG)](https://github.com/cantaro86/RAG)
+[![Last commit](https://img.shields.io/github/last-commit/cantaro86/RAG)](https://github.com/cantaro86/RAG/commits/main)
+
+[![Maintainer](https://img.shields.io/badge/maintainer-%40cantaro86-blue)](https://github.com/cantaro86)
+[![Release](https://img.shields.io/github/v/release/cantaro86/RAG)](https://github.com/cantaro86/RAG/releases)
+[![GitHub tag](https://img.shields.io/github/v/tag/cantaro86/RAG)](https://github.com/cantaro86/RAG/tags)
+
 
 
 ### Installation instructions:
@@ -57,7 +68,7 @@ spack repo add ./spack-repo
 
 spack install --add py-agentic-rag +cuda cuda_arch=90
 
-spack spec py-torch+cuda cuda_arch=90 %gcc@14.2.0 ^cuda@12.8^C
+spack spec py-torch+cuda cuda_arch=90 %gcc@14.2.0 ^cuda@12.8
 
 spack spec py-agentic-rag +cuda cuda_arch=90
 ```
