@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from agentic_rag._load_env import cfg
+from agentic_rag.detect_language import DetectLanguage
 from agentic_rag.dizionario import SynonymStore
 from agentic_rag.loggers import Logger
 from agentic_rag.state import GraphState
@@ -25,6 +26,7 @@ class RAGContext:
     pre_retrieval_question_rewriter: object
     question_transformer: object
     synonyms: SynonymStore
+    guardrail_chain: object
 
     def __post_init__(self):
         """Ensure all required dependencies are provided."""
@@ -280,6 +282,68 @@ def no_generation(state: GraphState) -> dict:
     return {**state, "generation": msg, "has_docs": False}
 
 
+def guardrail(state: GraphState, guardrail_chain):
+    logger.debug("--- GUARDRAIL ---")
+    question = state["question"]
+
+    # Run the guardrail classifier
+    classification = guardrail_chain.invoke({"question": question})
+    classification = str(classification).strip().upper()
+    logger.debug(f"Guardrail classification: {classification}")
+
+    if classification not in ("GREETING", "OFF_TOPIC", "ON_TOPIC"):
+        logger.warning(f"Unexpected guardrail classification '{classification}', defaulting to ON_TOPIC")
+        classification = "ON_TOPIC"
+
+    try:
+        quest = DetectLanguage(question)
+        lang = quest.lang
+    except Exception:
+        lang = "it"
+
+    return {
+        **state,
+        "guardrail_status": classification,
+        "language": lang,
+    }
+
+
+def handle_greeting(state: GraphState) -> dict:
+    logger.debug("--- HANDLE GREETING ---")
+    question = state["question"]
+    lang = state.get("language", "it")
+
+    if lang == "it":
+        reply = "Ciao, sono un agente IA. Hai domande sull'esame Colon-TC?"
+    else:
+        reply = "Hello, I am an AI agent. Do you have questions about the Colon-TC exam?"
+
+    msgs = push_memory(state, question, reply)
+    return {
+        **state,
+        "generation": reply,
+        "history": msgs,
+    }
+
+
+def handle_off_topic(state: GraphState) -> dict:
+    logger.debug("--- HANDLE OFF TOPIC ---")
+    question = state["question"]
+    lang = state.get("language", "it")
+
+    if lang == "it":
+        reply = "Spiacente, non posso aiutarti. Hai domande sull'esame Colon-TC?"
+    else:
+        reply = "Sorry, I cannot help you. Do you have questions about the Colon-TC exam?"
+
+    msgs = push_memory(state, question, reply)
+    return {
+        **state,
+        "generation": reply,
+        "history": msgs,
+    }
+
+
 # ------------------------
 # Agent Edges
 # ------------------------
@@ -325,6 +389,16 @@ def route_on_topic(state: GraphState) -> str:
     return "same"
 
 
+def route_guardrail(state: GraphState) -> str:
+    status = state.get("guardrail_status", "ON_TOPIC")
+    if status == "GREETING":
+        return "greeting"
+    elif status == "OFF_TOPIC":
+        return "off_topic"
+    else:
+        return "on_topic"
+
+
 # ------------------------
 # Build Agent Graph
 # ------------------------
@@ -334,6 +408,12 @@ def build_agent_graph(ctx: RAGContext):
     checkpointer = InMemorySaver()
 
     workflow = StateGraph(GraphState)
+
+    workflow.add_node("guardrail", partial(guardrail, guardrail_chain=ctx.guardrail_chain))
+
+    workflow.add_node("handle_greeting", handle_greeting)
+
+    workflow.add_node("handle_off_topic", handle_off_topic)
 
     workflow.add_node("sanitize_question", partial(sanitize_question, sanitizer_chain=ctx.sanitizer_chain))
 
@@ -369,7 +449,21 @@ def build_agent_graph(ctx: RAGContext):
 
     # EDGES
 
-    workflow.add_edge(START, "sanitize_question")
+    workflow.add_edge(START, "guardrail")
+
+    workflow.add_conditional_edges(
+        "guardrail",
+        route_guardrail,
+        {
+            "greeting": "handle_greeting",
+            "off_topic": "handle_off_topic",
+            "on_topic": "sanitize_question",
+        },
+    )
+
+    workflow.add_edge("handle_greeting", END)
+
+    workflow.add_edge("handle_off_topic", END)
 
     workflow.add_edge("sanitize_question", "init_first_question")
 

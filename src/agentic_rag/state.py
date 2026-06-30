@@ -21,3 +21,5 @@ class GraphState(TypedDict):
     generation: NotRequired[str]
     topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC", "STESSO", "NUOVO"]]
     has_docs: NotRequired[bool]
+    guardrail_status: NotRequired[Literal["GREETING", "OFF_TOPIC", "ON_TOPIC"]]
+    language: NotRequired[str]

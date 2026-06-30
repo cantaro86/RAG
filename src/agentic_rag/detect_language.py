@@ -64,8 +64,8 @@ class DetectLanguage:
         self.text = text.strip()
         self.lang = self._detect_language(self.text)
 
-        if self.lang not in ("it"):
-            raise ValueError(f"Unsupported language '{self.lang}'. Only italian is supported.")
+        if self.lang not in ("it", "en"):
+            raise ValueError(f"Unsupported language '{self.lang}'. Only Italian and English are supported.")
 
     # -------------------------
     # 🔍 Detection Methods
@@ -138,11 +138,19 @@ class DetectLanguage:
             return "it"
         return "unknown"  # Default to unknown
 
+    @property
+    def it(self) -> str:
+        return self.text
+
+    @property
+    def en(self) -> str:
+        return self.text
+
     def __repr__(self):
-        return f"DetectLanguage(it={self.text!r})"
+        return f"DetectLanguage({self.lang}={self.text!r})"
 
     def get(self, lang: str) -> str:
         """Return the question in the requested language."""
-        if lang not in ("it"):
-            raise ValueError("Language must be italian.")
+        if lang not in ("it", "en"):
+            raise ValueError("Language must be Italian or English.")
         return getattr(self, lang)

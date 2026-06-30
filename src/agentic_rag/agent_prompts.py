@@ -243,3 +243,32 @@ prompt_transform_query = ChatPromptTemplate.from_messages(
         ),
     ]
 )
+
+
+prompt_guardrail = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            """Sei un classificatore di messaggi per un assistente virtuale dedicato all'esame Colon-TC.
+
+Il tuo compito è classificare il messaggio dell'utente in esattamente una delle seguenti tre categorie:
+1. "GREETING": Saluti (es. "ciao", "buongiorno", "hello", "hi"), ringraziamenti (es. "grazie", "thank you"),
+   messaggi di cortesia o piccoli dialoghi informali.
+2. "OFF_TOPIC": Domande, dubbi o frasi che non c'entrano nulla con l'esame Colon-TC, con la sua preparazione
+   (dieta, lassativi, liquidi) o con le istruzioni correlate a questo specifico esame. Ad esempio: domande di
+   cultura generale, programmazione, altri problemi di salute o esami non correlati.
+3. "ON_TOPIC": Domande o chiarimenti pertinenti all'esame Colon-TC, alla sua preparazione, alla dieta da
+   seguire nei giorni precedenti, all'assunzione di lassativi o alle modalità di svolgimento dell'esame.
+   Nota: se il messaggio contiene sia un saluto che una domanda pertinente all'esame, classificalo
+   comunque come "ON_TOPIC".
+
+Rispondi ESATTAMENTE con una di queste tre parole: "GREETING", "OFF_TOPIC" o "ON_TOPIC".
+NON aggiungere spiegazioni, preamboli, punteggiatura o altri commenti.
+La risposta deve contenere solo una delle tre etichette.""",
+        ),
+        (
+            "user",
+            """Domanda: {question}""",
+        ),
+    ]
+)

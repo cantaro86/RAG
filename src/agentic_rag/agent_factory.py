@@ -3,6 +3,7 @@ from langchain_core.runnables import RunnableLambda
 
 from agentic_rag.agent_prompts import (
     prompt_clean_chat,
+    prompt_guardrail,
     prompt_rag,
     prompt_rewrite_medical,
     prompt_sanitizer,
@@ -50,6 +51,7 @@ def build_rag_agent(cfg: Config):
 
     # with do_sample=False the temperature, top_p and top_k are ignored, but we set them to default values for clarity
     llm_topic_classifier = llm.bind(temperature=1.0, top_p=1.0, top_k=50, do_sample=False, max_new_tokens=5)
+    llm_guardrail_classifier = llm.bind(temperature=1.0, top_p=1.0, top_k=50, do_sample=False, max_new_tokens=5)
     llm_rewriter_bound = llm.bind(temperature=0.1, top_p=0.95, top_k=50, do_sample=True)
 
     def invoke_prompt_value(prompt_value, model):
@@ -61,6 +63,7 @@ def build_rag_agent(cfg: Config):
     llm_messages = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_cleaner))
     llm_rewriter = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_rewriter_bound))
     llm_topic = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_topic_classifier))
+    llm_guardrail = RunnableLambda(lambda prompt_value: invoke_prompt_value(prompt_value, llm_guardrail_classifier))
 
     topic_continuity_classifier = prompt_topic | llm_topic | StrOutputParser()
     rag_chain = prompt_rag | llm_runnable | StrOutputParser()
@@ -68,6 +71,7 @@ def build_rag_agent(cfg: Config):
     cleaner_chain = prompt_clean_chat | llm_messages | StrOutputParser()
     pre_retrieval_question_rewriter = prompt_rewrite_medical | llm_rewriter | StrOutputParser()
     question_transformer = prompt_transform_query | llm_rewriter | StrOutputParser()
+    guardrail_chain = prompt_guardrail | llm_guardrail | StrOutputParser()
 
     # Load the synonym store
     synonyms = SynonymStore(excel_path=cfg.dizionario_path)
@@ -81,6 +85,7 @@ def build_rag_agent(cfg: Config):
         pre_retrieval_question_rewriter=pre_retrieval_question_rewriter,
         question_transformer=question_transformer,
         synonyms=synonyms,
+        guardrail_chain=guardrail_chain,
     )
 
     return build_agent_graph(ctx)
