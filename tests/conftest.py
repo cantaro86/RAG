@@ -4,8 +4,10 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.documents import Document
 
 from agentic_rag.config_schema import Config, load_config
+from agentic_rag.graph import RAGContext
 
 # ---------------------------------------------------------------------------
 # Fixtures config
@@ -151,3 +153,42 @@ def dummy_config():
     cfg.chat = False
     cfg.gradio = False
     return cfg
+
+
+# ---------------------------------------------------------------------------
+# Fixtures RAGContext
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_ctx():
+    ctx = MagicMock(spec=RAGContext)
+
+    # Mock all chains to return basic mock values
+    ctx.guardrail_chain = MagicMock()
+    ctx.sanitizer_chain = MagicMock()
+    ctx.sanitizer_chain.invoke.return_value = "Sanitized query"
+    ctx.topic_continuity_classifier = MagicMock()
+    ctx.topic_continuity_classifier.invoke.return_value = "SAME"
+    ctx.pre_retrieval_question_rewriter = MagicMock()
+    ctx.pre_retrieval_question_rewriter.invoke.return_value = "Rewritten query"
+    ctx.question_transformer = MagicMock()
+    ctx.question_transformer.invoke.return_value = "Transformed query"
+    ctx.rag_chain = MagicMock()
+    ctx.rag_chain.invoke.return_value = "Mocked RAG response"
+    ctx.cleaner_chain = MagicMock()
+    ctx.cleaner_chain.invoke.return_value = "Cleaned mocked RAG response"
+
+    # Mock retriever
+    ctx.retriever = MagicMock()
+    mock_doc = Document(
+        page_content="Istruzioni per pazienti esame Colon-TC.",
+        metadata={"rerank_score": 0.9, "source": "Informazioni_per_pazienti.md"},
+    )
+    ctx.retriever.invoke.return_value = [mock_doc]
+
+    # Mock synonyms
+    ctx.synonyms = MagicMock()
+    ctx.synonyms.find_matched_terms.return_value = []
+
+    return ctx
