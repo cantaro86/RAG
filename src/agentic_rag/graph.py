@@ -96,7 +96,7 @@ def guardrail(state: GraphState, guardrail_chain):
 def handle_hello(state: GraphState) -> dict:
     logger.debug("--- HANDLE HELLO ---")
 
-    reply = "Ciao, sono un agente IA. Hai domande sull'esame Colon-TC?"
+    reply = "Ciao, sono un agente IA. Rispondo alle tue domande sull'esame Colon-TC."
 
     return {
         **state,
@@ -107,7 +107,7 @@ def handle_hello(state: GraphState) -> dict:
 def handle_thanks(state: GraphState) -> dict:
     logger.debug("--- HANDLE THANKS ---")
 
-    reply = "Di nulla, sono qui per aiutarti. Hai domande sull'esame Colon-TC?"
+    reply = "Di nulla, sono qui per aiutarti. Rispondo alle tue domande sull'esame Colon-TC."
 
     return {
         **state,
@@ -118,7 +118,7 @@ def handle_thanks(state: GraphState) -> dict:
 def handle_off_topic(state: GraphState) -> dict:
     logger.debug("--- HANDLE OFF TOPIC ---")
 
-    reply = "Spiacente, non posso aiutarti. Hai domande sull'esame Colon-TC?"
+    reply = "Spiacente, non posso aiutarti. Rispondo alle tue domande sull'esame Colon-TC."
 
     return {
         **state,
@@ -383,9 +383,9 @@ def route_on_topic(state: GraphState) -> str:
 def route_guardrail(state: GraphState) -> str:
     status = state.get("guardrail_status", "ON_TOPIC")
     if status == "SALUTO":
-        return "saluto"
+        return "hello"
     elif status == "GRAZIE":
-        return "ringraziamento"
+        return "thanks"
     elif status == "OFF_TOPIC":
         return "off_topic"
     else:
@@ -452,8 +452,8 @@ def build_agent_graph(ctx: RAGContext):
         "guardrail",
         route_guardrail,
         {
-            "saluto": "handle_hello",
-            "ringraziamento": "handle_thanks",
+            "hello": "handle_hello",
+            "thanks": "handle_thanks",
             "off_topic": "handle_off_topic",
             "on_topic": "init_first_question",
         },
