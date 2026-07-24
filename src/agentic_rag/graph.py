@@ -24,6 +24,7 @@ class RAGContext:
     cleaner_chain: object
     pre_retrieval_question_rewriter: object
     question_transformer: object
+    guardrail_chain: object
     synonyms: SynonymStore
 
     def __post_init__(self):
@@ -71,6 +72,58 @@ def sanitize_question(state: GraphState, sanitizer_chain):
     sanitized = sanitizer_chain.invoke({"question": question})
     logger.debug(f"Sanitized question: {sanitized}")
     return {**state, "question": sanitized}
+
+
+def guardrail(state: GraphState, guardrail_chain):
+    logger.debug("--- GUARDRAIL ---")
+    question = state["question"]
+
+    # Run the guardrail classifier
+    classification = guardrail_chain.invoke({"question": question})
+    classification = str(classification).strip().upper()
+    logger.debug(f"Guardrail classification: {classification}")
+
+    if classification not in ("SALUTO", "GRAZIE", "OFF_TOPIC", "ON_TOPIC"):
+        logger.warning(f"Unexpected guardrail classification '{classification}', defaulting to ON_TOPIC")
+        classification = "ON_TOPIC"
+
+    return {
+        **state,
+        "guardrail_status": classification,
+    }
+
+
+def handle_hello(state: GraphState) -> dict:
+    logger.debug("--- HANDLE HELLO ---")
+
+    reply = "Ciao, sono un agente IA. Rispondo alle tue domande sull'esame Colon-TC."
+
+    return {
+        **state,
+        "generation": reply,
+    }
+
+
+def handle_thanks(state: GraphState) -> dict:
+    logger.debug("--- HANDLE THANKS ---")
+
+    reply = "Di nulla, sono qui per aiutarti. Rispondo alle tue domande sull'esame Colon-TC."
+
+    return {
+        **state,
+        "generation": reply,
+    }
+
+
+def handle_off_topic(state: GraphState) -> dict:
+    logger.debug("--- HANDLE OFF TOPIC ---")
+
+    reply = "Spiacente, non posso aiutarti. Rispondo alle tue domande sull'esame Colon-TC."
+
+    return {
+        **state,
+        "generation": reply,
+    }
 
 
 def init_first_question(state: GraphState) -> dict:
@@ -276,7 +329,9 @@ def clear_history(state: GraphState) -> dict:
 
 def no_generation(state: GraphState) -> dict:
     logger.debug("--- NO GENERATION NO DOCS---")
-    msg = "I couldn't find relevant information. Please rephrase your question or add details."
+    msg = (
+        "Non sono riuscito a trovare informazioni pertinenti. Per favore riformula la tua domanda o aggiungi dettagli."
+    )
     return {**state, "generation": msg, "has_docs": False}
 
 
@@ -325,6 +380,18 @@ def route_on_topic(state: GraphState) -> str:
     return "same"
 
 
+def route_guardrail(state: GraphState) -> str:
+    status = state.get("guardrail_status", "ON_TOPIC")
+    if status == "SALUTO":
+        return "hello"
+    elif status == "GRAZIE":
+        return "thanks"
+    elif status == "OFF_TOPIC":
+        return "off_topic"
+    else:
+        return "on_topic"
+
+
 # ------------------------
 # Build Agent Graph
 # ------------------------
@@ -336,6 +403,14 @@ def build_agent_graph(ctx: RAGContext):
     workflow = StateGraph(GraphState)
 
     workflow.add_node("sanitize_question", partial(sanitize_question, sanitizer_chain=ctx.sanitizer_chain))
+
+    workflow.add_node("guardrail", partial(guardrail, guardrail_chain=ctx.guardrail_chain))
+
+    workflow.add_node("handle_hello", handle_hello)
+
+    workflow.add_node("handle_thanks", handle_thanks)
+
+    workflow.add_node("handle_off_topic", handle_off_topic)
 
     workflow.add_node("init_first_question", init_first_question)
 
@@ -371,7 +446,24 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_edge(START, "sanitize_question")
 
-    workflow.add_edge("sanitize_question", "init_first_question")
+    workflow.add_edge("sanitize_question", "guardrail")
+
+    workflow.add_conditional_edges(
+        "guardrail",
+        route_guardrail,
+        {
+            "hello": "handle_hello",
+            "thanks": "handle_thanks",
+            "off_topic": "handle_off_topic",
+            "on_topic": "init_first_question",
+        },
+    )
+
+    workflow.add_edge("handle_hello", END)
+
+    workflow.add_edge("handle_thanks", END)
+
+    workflow.add_edge("handle_off_topic", END)
 
     workflow.add_conditional_edges(
         "init_first_question",

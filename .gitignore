@@ -27,6 +27,7 @@ temp_images
 notebooks
 src/agentic_rag/__pycache__
 src/agentic_rag.egg-info
+lid.176.ftz
 
 agent_rag.log.*
 

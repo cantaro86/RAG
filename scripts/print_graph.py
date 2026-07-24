@@ -1,5 +1,5 @@
 """
-From inside utils, run this script with:
+From inside scripts, run this script with:
 >> PYTHONPATH=../src python print_graph.py
 
 Run it inside a GPU node.

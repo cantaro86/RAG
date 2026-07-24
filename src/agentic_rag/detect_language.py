@@ -139,7 +139,7 @@ class DetectLanguage:
         return "unknown"  # Default to unknown
 
     def __repr__(self):
-        return f"DetectLanguage(it={self.text!r})"
+        return f"DetectLanguage({self.text!r})"
 
     def get(self, lang: str) -> str:
         """Return the question in the requested language."""
