@@ -6,7 +6,7 @@ authors = [
     { name = "Nicola Cantarutti", email = "nicola.cantarutti@uniud.it" }
 ]
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "accelerate",
     "bitsandbytes; sys_platform != 'darwin'",
@@ -28,7 +28,7 @@ dependencies = [
     "sacremoses",
     "scipy",
     "sentence_transformers",
-    "torch>=2.9.0",
+    "torch==2.9.0",
     "tqdm",
     "transformers>=4.57.1",
     "mlx; sys_platform == 'darwin' and platform_machine == 'arm64'",
@@ -65,6 +65,15 @@ namespaces = false  # prevent folders without __init__.py from being scanned
 
 [project.scripts]
 agentic_rag = "agentic_rag.cli:main"
+
+
+[tool.uv]
+default-groups = ["dev"]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
+environments = [
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 
 [tool.ruff]

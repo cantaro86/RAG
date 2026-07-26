@@ -16,7 +16,7 @@
 
 Virtual environment:
 ```bash
-module load python 3.12
+module load python3.14
 python -m venv --prompt RAG ./python-venv
 source ./python-venv/bin/activate
 ```
@@ -56,8 +56,41 @@ If you do not want to install the package, you can run the program with:
 PYTHONPATH=src python -m agentic_rag
 ```
 
+### Using uv for installation and development (recommended)
 
-#### Spack
+Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
+
+```bash
+module load python3.14
+module load uv
+# Create a virtual environment with uv (matching the original venv pattern)
+uv venv --prompt RAG
+
+# Activate the environment
+source .venv/bin/activate
+
+# Install the package in development mode
+uv pip install -e .
+# For developers with dev dependencies
+uv pip install -e ".[dev]"
+
+# Run commands in the environment
+uv run agentic_rag
+```
+
+
+If you want to specify the Python version and the environment name:
+```bash
+# Create venv with specific Python version
+uv venv --prompt RAG ./uv-venv --python 3.14
+uv run --active which python
+uv run --active syncuv run --active
+```
+
+
+
+
+### Spack
 
 module load spack
 spacktivate RAG
