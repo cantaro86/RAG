@@ -68,7 +68,6 @@ agentic_rag = "agentic_rag.cli:main"
 
 
 [tool.uv]
-default-groups = ["dev"]
 cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 environments = [
   "sys_platform == 'linux' and platform_machine == 'x86_64'",
