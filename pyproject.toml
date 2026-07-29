@@ -47,6 +47,19 @@ dev = [
     "pynvml",
 ]
 
+[dependency-groups]
+dev = [
+  "ruff",
+  "coverage",
+  "pre-commit",
+  "pytest",
+  "jupyter",
+  "debugpy",
+  "pynvml",
+]
+
+
+
 [build-system]
 requires = ["setuptools>=65", "wheel", "setuptools-scm[toml]>=8"]
 build-backend = "setuptools.build_meta"

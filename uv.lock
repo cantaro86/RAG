@@ -70,6 +70,17 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "coverage" },
+    { name = "debugpy" },
+    { name = "jupyter" },
+    { name = "pre-commit" },
+    { name = "pynvml" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "accelerate" },
@@ -106,6 +117,17 @@ requires-dist = [
     { name = "transformers", specifier = ">=4.57.1" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "coverage" },
+    { name = "debugpy" },
+    { name = "jupyter" },
+    { name = "pre-commit" },
+    { name = "pynvml" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
 
 [[package]]
 name = "aiohappyeyeballs"

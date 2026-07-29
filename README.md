@@ -12,7 +12,66 @@
 
 
 
-### Installation instructions:
+
+
+### Installation (recommended)
+
+Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
+
+```bash
+module load python3.14
+module load uv
+
+uv sync
+# or
+uv sync --group dev
+```
+
+If you want to specify the Python version and the environment name (Not recommended):
+```bash
+# Create venv with specific Python version
+uv venv --prompt RAG ./uv-venv --python 3.14
+source ./uv-venv/bin/activate
+uv run --active which python
+uv run --active sync
+# or
+uv pip install -e .
+```
+
+
+### Run the program
+Cluster allocation:
+```bash
+salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
+```
+
+Run it inside the SLURM interactive allocation with
+```bash
+uv run agentic_rag
+```
+Or, if the virtual environment is active:
+```bash
+agentic_rag
+```
+
+As a SBATCH script with a gradio web interface:
+```bash
+sbatch rag_gradio.sbatch
+```
+
+Do not run this:
+```bash
+python src/agentic_rag/cli.py
+```
+
+If you do not want to install the package, you can run the program with:
+
+```bash
+PYTHONPATH=src python -m agentic_rag
+```
+
+
+### Legacy installation instructions:
 
 Virtual environment:
 ```bash
@@ -30,67 +89,11 @@ python -m pip install -e .
 python -m pip install -e ".[dev]"
 ```
 
-Cluster allocation:
-```bash
-salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
-```
-
-Run it inside the SLURM interactive allocation with
-```bash
-agentic_rag
-```
-
-Or as a SBATCH script with a gradio web interface:
-```bash
-sbatch rag_gradio.sbatch
-```
-
-Do not run this:
-```bash
-python src/agentic_rag/cli.py
-```
-
-If you do not want to install the package, you can run the program with:
-
-```bash
-PYTHONPATH=src python -m agentic_rag
-```
-
-### Using uv for installation and development (recommended)
-
-Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
-
-```bash
-module load python3.14
-module load uv
-# Create a virtual environment with uv (matching the original venv pattern)
-uv venv --prompt RAG
-
-# Activate the environment
-source .venv/bin/activate
-
-# Install the package in development mode
-uv pip install -e .
-# For developers with dev dependencies
-uv pip install -e ".[dev]"
-
-# Run commands in the environment
-uv run agentic_rag
-```
-
-
-If you want to specify the Python version and the environment name:
-```bash
-# Create venv with specific Python version
-uv venv --prompt RAG ./uv-venv --python 3.14
-uv run --active which python
-uv run --active syncuv run --active
-```
 
 
 
 
-### Spack
+### Spack (work in progress)
 
 module load spack
 spacktivate RAG

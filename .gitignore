@@ -31,7 +31,7 @@ lid.176.ftz
 
 agent_rag.log.*
 
-src/agentic_rag/_version.py 
+src/agentic_rag/_version.py
 
 python-venv
 
