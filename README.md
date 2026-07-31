@@ -12,24 +12,34 @@
 
 
 
-### Installation instructions:
 
-Virtual environment:
+
+### Installation (recommended)
+
+Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
+
 ```bash
-module load python 3.12
-python -m venv --prompt RAG ./python-venv
-source ./python-venv/bin/activate
+module load python3.14
+module load uv
+
+uv sync
+# or
+uv sync --group dev
 ```
 
-Install the package:
+If you want to specify the Python version and the environment name (Not recommended):
 ```bash
-python -m pip install --upgrade pip
-
-python -m pip install -e .
-# or for developers
-python -m pip install -e ".[dev]"
+# Create venv with specific Python version
+uv venv --prompt RAG ./uv-venv --python 3.14
+source ./uv-venv/bin/activate
+uv run --active which python
+uv run --active sync
+# or
+uv pip install -e .
 ```
 
+
+### Run the program
 Cluster allocation:
 ```bash
 salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
@@ -37,10 +47,14 @@ salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-p
 
 Run it inside the SLURM interactive allocation with
 ```bash
+uv run agentic_rag
+```
+Or, if the virtual environment is active:
+```bash
 agentic_rag
 ```
 
-Or as a SBATCH script with a gradio web interface:
+As a SBATCH script with a gradio web interface:
 ```bash
 sbatch rag_gradio.sbatch
 ```
@@ -57,7 +71,29 @@ PYTHONPATH=src python -m agentic_rag
 ```
 
 
-#### Spack
+### Legacy installation instructions:
+
+Virtual environment:
+```bash
+module load python3.14
+python -m venv --prompt RAG ./python-venv
+source ./python-venv/bin/activate
+```
+
+Install the package:
+```bash
+python -m pip install --upgrade pip
+
+python -m pip install -e .
+# or for developers
+python -m pip install -e ".[dev]"
+```
+
+
+
+
+
+### Spack (work in progress)
 
 module load spack
 spacktivate RAG

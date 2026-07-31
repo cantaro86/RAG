@@ -9,38 +9,20 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
         with:
-          python-version: "3.12"
-
-      - name: Cache Python dependencies
-        id: cache-pip
-        uses: actions/cache@v5
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}-${{ hashFiles('**/.github/workflows/*.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}-
-            ${{ runner.os }}-pip-
+          python-version: "3.14"
+          enable-cache: true
 
       - name: Install package with dev dependencies
-        if: steps.cache-pip.outputs.cache-hit != 'true'
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: uv sync --locked --extra dev
 
       - name: Run tests
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: pytest -m cpu
-
-      - name: Save virtual environment to cache
-        if: steps.cache-pip.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ${{ env.pythonLocation }}
-          key: ${{ steps.cache-pip.outputs.cache-key }}
+        run: uv run pytest -m cpu
