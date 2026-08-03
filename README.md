@@ -14,6 +14,14 @@
 
 
 
+### HF TOKEN
+
+Create a file called `.env` in the root path of the project with inside:
+```
+HF_TOKEN="hf_your_hugging_face_token"
+```
+
+
 ### Installation (recommended)
 
 Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
