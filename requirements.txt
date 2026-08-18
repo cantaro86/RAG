@@ -146,6 +146,7 @@ httpx==0.28.1 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (p
     #   gradio
     #   gradio-client
     #   jupyterlab
+    #   langchain-core
     #   langgraph-sdk
     #   langsmith
     #   safehttpx
@@ -273,7 +274,7 @@ langchain-classic==1.0.1 ; (platform_machine == 'arm64' and sys_platform == 'dar
     # via langchain-community
 langchain-community==0.4.1 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via agentic-rag
-langchain-core==1.2.13 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+langchain-core==1.5.6 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via
     #   agentic-rag
     #   langchain
@@ -286,6 +287,8 @@ langchain-core==1.2.13 ; (platform_machine == 'arm64' and sys_platform == 'darwi
     #   langgraph-prebuilt
 langchain-huggingface==1.2.0 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via agentic-rag
+langchain-protocol==0.0.18 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+    # via langchain-core
 langchain-text-splitters==1.1.0 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via
     #   agentic-rag
@@ -732,6 +735,7 @@ typing-extensions==4.16.0 ; (platform_machine == 'arm64' and sys_platform == 'da
     #   huggingface-hub
     #   jupyter-client
     #   langchain-core
+    #   langchain-protocol
     #   langsmith
     #   pydantic
     #   pydantic-core
