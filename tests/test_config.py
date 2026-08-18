@@ -70,6 +70,16 @@ def test_load_config_raises_for_extra_unknown_key(tmp_path: Path) -> None:
     )
 
 
+def test_removed_workers_key_is_rejected(tmp_path: Path) -> None:
+    path = tmp_path / "config.yaml"
+    data = make_valid_config()
+    data["workers"] = 8
+    write_yaml(path, data)
+
+    with pytest.raises(ValidationError, match="workers"):
+        load_config(path)
+
+
 def test_load_config_raises_for_missing_file(tmp_path) -> None:
     """Verify that loading a missing config file raises FileNotFoundError."""
     missing = tmp_path / "config.yaml"
@@ -127,6 +137,18 @@ def test_load_config_raises_validation_error_when_chunk_overlap_is_too_large(
     write_yaml(path, data)
 
     with pytest.raises(ValidationError, match="chunk_overlap|chunk_size"):
+        load_config(path)
+
+
+def test_load_config_raises_when_min_chunk_length_is_not_smaller_than_chunk_size(tmp_path) -> None:
+    path = tmp_path / "config.yaml"
+    data = make_valid_config()
+    data["chunk_size"] = 300
+    data["chunk_overlap"] = 50
+    data["min_chunk_length"] = 300
+    write_yaml(path, data)
+
+    with pytest.raises(ValidationError, match="min_chunk_length.*chunk_size"):
         load_config(path)
 
 

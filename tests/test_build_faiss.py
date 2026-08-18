@@ -12,24 +12,34 @@ Covers:
   - Pipeline: chunk_markdown → merge_continuation_lists
 
 Run with:
-    pytest tests/test_indexing.py -v
+    uv run pytest -m cpu tests/test_build_faiss.py
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+import agentic_rag.build_faiss as build_faiss_module
+from agentic_rag._load_env import cfg as runtime_cfg
 from agentic_rag.build_faiss import (
     _SPLITTER,
     _detect_lang_safe,
     _flush_text,
     _make_metadata,
+    build_embedder,
+    build_faiss_index,
     chunk_markdown,
     extract_list_number,
+    load_vectorstore,
     merge_continuation_lists,
     split_block_by_type,
 )
+from agentic_rag.config_schema import Config
+
+from .helpers import make_valid_config
 
 pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
 
@@ -194,7 +204,7 @@ class TestFlushText:
         assert m["type"] == "text"
 
     def test_long_text_is_split_into_multiple_chunks(self):
-        # Text larger than chunk_size (1500) should produce more than one chunk
+        # Text larger than the configured chunk size should produce more than one chunk.
         long_text = ("Testo di prova molto lungo. " * 100).strip()
         pending = [long_text]
         chunks, _ = self._call(pending)
@@ -262,6 +272,10 @@ class TestSplitBlockByType:
 
 
 class TestChunkMarkdown:
+    def test_default_splitter_uses_runtime_config(self):
+        assert _SPLITTER._chunk_size == runtime_cfg.chunk_size
+        assert _SPLITTER._chunk_overlap == runtime_cfg.chunk_overlap
+
     def test_returns_list_of_documents(self, simple_md):
         assert all(isinstance(c, Document) for c in chunk_markdown(simple_md))
 
@@ -307,6 +321,191 @@ class TestChunkMarkdown:
         allowed = {"text", "list", "table", "recomm"}
         for c in chunk_markdown(simple_md):
             assert c.metadata.get("type") in allowed, f"Unexpected chunk type: {c.metadata.get('type')!r}"
+
+    def test_injected_splitter_controls_prose_size_and_overlap(self, tmp_path):
+        md = tmp_path / "prose.md"
+        md.write_text("# Introduzione\n\n" + "abcdefghij" * 40, encoding="utf-8")
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=48,
+            chunk_overlap=8,
+            separators=[""],
+        )
+
+        chunks = [c for c in chunk_markdown(md, splitter=splitter) if c.metadata["type"] == "text"]
+
+        assert len(chunks) > 1
+        assert all(len(c.page_content) <= 48 for c in chunks)
+        assert any(
+            left.page_content[-8:] == right.page_content[:8] for left, right in zip(chunks, chunks[1:], strict=False)
+        )
+
+
+def test_build_faiss_uses_configured_splitter_and_online_mode(tmp_path, monkeypatch):
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "doc.md").write_text("# Titolo\n\nTesto sufficientemente lungo.", encoding="utf-8")
+
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 77,
+            "chunk_overlap": 13,
+            "min_chunk_length": 1,
+            "online": False,
+        }
+    )
+    cfg = Config.model_validate(data)
+    captured = {}
+
+    def fake_chunk_markdown(md_path, splitter):
+        captured["path"] = md_path
+        captured["chunk_size"] = splitter._chunk_size
+        captured["chunk_overlap"] = splitter._chunk_overlap
+        return [Document(page_content="contenuto indicizzabile", metadata={"type": "text"})]
+
+    embedder = object()
+    embedder_builder = MagicMock(return_value=embedder)
+    vectorstore = MagicMock()
+    from_documents = MagicMock(return_value=vectorstore)
+    monkeypatch.setattr(build_faiss_module, "chunk_markdown", fake_chunk_markdown)
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    build_faiss_index(cfg)
+
+    assert captured == {
+        "path": md_dir / "doc.md",
+        "chunk_size": 77,
+        "chunk_overlap": 13,
+    }
+    embedder_builder.assert_called_once_with(
+        cfg.embed_model,
+        online=False,
+        cache_folder=build_faiss_module.hf_hub_cache_for(cfg.hf_home),
+    )
+    from_documents.assert_called_once()
+    vectorstore.save_local.assert_called_once_with(cfg.index_dir)
+
+
+@pytest.mark.parametrize("online, effective_online", [(True, True), (True, False), (False, False)])
+def test_build_embedder_uses_effective_online_policy(monkeypatch, online, effective_online):
+    embeddings = MagicMock()
+    policy = MagicMock(return_value=effective_online)
+    monkeypatch.setattr(build_faiss_module, "hf_online_enabled", policy)
+    monkeypatch.setattr(build_faiss_module, "HuggingFaceEmbeddings", embeddings)
+
+    build_embedder("embed-model", online=online, cache_folder="/configured/cache")
+
+    policy.assert_called_once_with(online)
+    assert embeddings.call_args.kwargs["model_kwargs"]["local_files_only"] is not effective_online
+    assert embeddings.call_args.kwargs["cache_folder"] == "/configured/cache"
+
+
+def test_load_vectorstore_uses_explicit_gpu_flag(monkeypatch):
+    embedder = object()
+    vectorstore = MagicMock()
+    embedder_builder = MagicMock(return_value=embedder)
+    load_local = MagicMock(return_value=vectorstore)
+    gpu_count = MagicMock(return_value=1)
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "load_local", load_local)
+    monkeypatch.setattr(build_faiss_module.faiss, "get_num_gpus", gpu_count)
+
+    result = load_vectorstore(
+        "index",
+        "embed-model",
+        online=False,
+        use_gpu_index=False,
+        cache_folder="/configured/cache",
+    )
+
+    assert result is vectorstore
+    embedder_builder.assert_called_once_with(
+        "embed-model",
+        online=False,
+        cache_folder="/configured/cache",
+    )
+    load_local.assert_called_once_with("index", embedder, allow_dangerous_deserialization=True)
+    gpu_count.assert_not_called()
+
+
+def test_load_vectorstore_supports_metal_resources_without_temp_memory(monkeypatch):
+    vectorstore = MagicMock()
+    vectorstore.index = "cpu-index"
+    resource = object()
+    monkeypatch.setattr(build_faiss_module, "build_embedder", MagicMock(return_value=object()))
+    monkeypatch.setattr(build_faiss_module.FAISS, "load_local", MagicMock(return_value=vectorstore))
+    monkeypatch.setattr(build_faiss_module.faiss, "get_num_gpus", MagicMock(return_value=1))
+    monkeypatch.setattr(build_faiss_module.faiss, "StandardGpuResources", MagicMock(return_value=resource))
+    move = MagicMock(return_value="accelerated-index")
+    monkeypatch.setattr(build_faiss_module.faiss, "index_cpu_to_gpu", move)
+
+    result = load_vectorstore(
+        "index",
+        "embed-model",
+        online=False,
+        use_gpu_index=True,
+        cache_folder="/configured/cache",
+    )
+
+    assert result.index == "accelerated-index"
+    move.assert_called_once_with(resource, 0, "cpu-index")
+
+
+def test_build_faiss_fails_before_model_loading_when_no_chunks_remain(tmp_path, monkeypatch):
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "short.md").write_text("# Tiny\n", encoding="utf-8")
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "min_chunk_length": 20,
+        }
+    )
+    cfg = Config.model_validate(data)
+    embedder_builder = MagicMock()
+    from_documents = MagicMock()
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    with pytest.raises(ValueError, match=r"No chunks remain.*min_chunk_length=20"):
+        build_faiss_index(cfg)
+
+    embedder_builder.assert_not_called()
+    from_documents.assert_not_called()
+
+
+def test_min_chunk_length_is_inclusive(tmp_path, monkeypatch):
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "exact.md").write_text("# Exact", encoding="utf-8")
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "min_chunk_length": 20,
+        }
+    )
+    cfg = Config.model_validate(data)
+    exact_chunk = Document(page_content="x" * 20, metadata={"type": "text"})
+    monkeypatch.setattr(build_faiss_module, "chunk_markdown", lambda *_args, **_kwargs: [exact_chunk])
+    monkeypatch.setattr(build_faiss_module, "build_embedder", MagicMock(return_value=object()))
+    vectorstore = MagicMock()
+    from_documents = MagicMock(return_value=vectorstore)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    build_faiss_index(cfg)
+
+    assert from_documents.call_args.args[0] == [exact_chunk]
 
 
 # ===========================================================================
@@ -469,7 +668,8 @@ class TestListaDiIstruzioni:
 )
 class TestChunkMarkdownRealDocument:
     @pytest.fixture(scope="class")
-    def chunks(self):
+    @classmethod
+    def chunks(cls):
         return chunk_markdown(PAZIENTE_MD)
 
     def test_produces_chunks(self, chunks):

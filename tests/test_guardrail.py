@@ -1,4 +1,5 @@
 import pytest
+from langchain_core.documents import Document
 
 from agentic_rag.detect_language import DetectLanguage
 from agentic_rag.graph import build_agent_graph
@@ -23,12 +24,12 @@ def test_language_detection_relaxation():
         DetectLanguage("Guten Tag, ich möchte Informationen über die Vorbereitung haben.")
 
 
-def test_graph_routing_thanks(mock_ctx):
+def test_graph_routing_thanks(mock_ctx, config_data):
     mock_ctx.guardrail_chain.invoke.return_value = "GRAZIE"
 
     question = "Grazie per le informazioni!"
 
-    agent = build_agent_graph(mock_ctx)
+    agent = build_agent_graph(mock_ctx, config_data)
     state = {"question": question}
     config = {"configurable": {"thread_id": "test-thread"}}
 
@@ -44,12 +45,12 @@ def test_graph_routing_thanks(mock_ctx):
     mock_ctx.retriever.invoke.assert_not_called()
 
 
-def test_graph_routing_hello(mock_ctx):
+def test_graph_routing_hello(mock_ctx, config_data):
     mock_ctx.guardrail_chain.invoke.return_value = "SALUTO"
 
     question = "Ciao, vorrei fare una domanda"
 
-    agent = build_agent_graph(mock_ctx)
+    agent = build_agent_graph(mock_ctx, config_data)
     state = {"question": question}
     config = {"configurable": {"thread_id": "test-thread"}}
 
@@ -65,12 +66,12 @@ def test_graph_routing_hello(mock_ctx):
     mock_ctx.retriever.invoke.assert_not_called()
 
 
-def test_graph_routing_off_topic(mock_ctx):
+def test_graph_routing_off_topic(mock_ctx, config_data):
     mock_ctx.guardrail_chain.invoke.return_value = "OFF_TOPIC"
 
     question = "Come si prepara la carbonara?"
 
-    agent = build_agent_graph(mock_ctx)
+    agent = build_agent_graph(mock_ctx, config_data)
     state = {"question": question}
     config = {"configurable": {"thread_id": "test-thread"}}
 
@@ -86,12 +87,12 @@ def test_graph_routing_off_topic(mock_ctx):
     mock_ctx.retriever.invoke.assert_not_called()
 
 
-def test_graph_routing_on_topic(mock_ctx):
+def test_graph_routing_on_topic(mock_ctx, config_data):
     mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
 
     question = "Qual è la preparazione per la Colon-TC?"
 
-    agent = build_agent_graph(mock_ctx)
+    agent = build_agent_graph(mock_ctx, config_data)
     state = {"question": question}
     config = {"configurable": {"thread_id": "test-thread"}}
 
@@ -104,3 +105,62 @@ def test_graph_routing_on_topic(mock_ctx):
     mock_ctx.retriever.invoke.assert_called()
     mock_ctx.rag_chain.invoke.assert_called_once()
     assert result["generation"] == "Mocked RAG response"
+
+
+def test_guardrail_branch_resets_transient_state_and_preserves_history(mock_ctx, config_data):
+    agent = build_agent_graph(mock_ctx, config_data)
+    config = {"configurable": {"thread_id": "test-reset-thread"}}
+    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
+
+    first = agent.invoke({"question": "Come mi preparo?"}, config=config)
+    first_history = first["history"]
+    assert first_history
+
+    mock_ctx.guardrail_chain.invoke.return_value = "SALUTO"
+    second = agent.invoke({"question": "Ciao"}, config=config)
+
+    assert second["guardrail_status"] == "SALUTO"
+    assert second["documents"] == []
+    assert second["rewrite_count"] == 0
+    assert second["has_docs"] is False
+    assert second["history"] == first_history
+
+
+def test_graph_uses_passed_rerank_cleaning_and_memory_config(mock_ctx, config_data):
+    cfg = config_data.model_copy(
+        update={
+            "rerank": False,
+            "threshold": 100.0,
+            "clean_answer": True,
+            "max_history_turns": 0,
+        }
+    )
+    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
+    mock_ctx.retriever.invoke.return_value = [Document(page_content="contenuto", metadata={})]
+    mock_ctx.rag_chain.invoke.return_value = "Risposta grezza (Doc 2)"
+    mock_ctx.cleaner_chain.invoke.return_value = "Risposta pulita"
+    agent = build_agent_graph(mock_ctx, cfg)
+
+    result = agent.invoke(
+        {"question": "Come mi preparo?"},
+        config={"configurable": {"thread_id": "test-passed-config"}},
+    )
+
+    assert result["generation"] == "Risposta pulita"
+    assert result["history"] == []
+    mock_ctx.cleaner_chain.invoke.assert_called_once_with({"answer": "Risposta grezza (Doc 2)"})
+
+
+def test_graph_uses_passed_rerank_threshold(mock_ctx, config_data):
+    cfg = config_data.model_copy(update={"threshold": 0.95, "rerank": True})
+    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
+    agent = build_agent_graph(mock_ctx, cfg)
+
+    result = agent.invoke(
+        {"question": "Come mi preparo?"},
+        config={"configurable": {"thread_id": "test-passed-threshold"}},
+    )
+
+    assert result["has_docs"] is False
+    assert "Non sono riuscito" in result["generation"]
+    mock_ctx.rag_chain.invoke.assert_not_called()
