@@ -1,6 +1,7 @@
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 
+from agentic_rag._load_env import hf_hub_cache_for
 from agentic_rag.agent_prompts import (
     prompt_clean_chat,
     prompt_guardrail,
@@ -23,7 +24,15 @@ def build_rag_agent(cfg: Config):
     Build and return the compiled agent graph.
     Single source of truth used by both CLI and Gradio.
     """
-    vs = load_vectorstore(cfg.index_dir, cfg.embed_model)
+    cache_folder = hf_hub_cache_for(cfg.hf_home)
+
+    vs = load_vectorstore(
+        cfg.index_dir,
+        cfg.embed_model,
+        online=cfg.online,
+        use_gpu_index=cfg.use_gpu_index,
+        cache_folder=cache_folder,
+    )
 
     retriever = build_retriever(
         vs,
@@ -31,6 +40,11 @@ def build_rag_agent(cfg: Config):
         cfg.rerank_model if cfg.rerank else None,
         cfg.k_reranked,
         score_key="rerank_score",
+        search_type=cfg.search_type,
+        fetch_k=cfg.fetch_k,
+        lambda_mult=cfg.lambda_mult,
+        online=cfg.online,
+        cache_folder=cache_folder,
     )
 
     llm = build_llm_pipe(
@@ -42,6 +56,9 @@ def build_rag_agent(cfg: Config):
         cfg.repetition_penalty,
         cfg.no_repeat_ngram_size,
         quantization=cfg.quantization,
+        online=cfg.online,
+        debugger=cfg.debugger,
+        cache_folder=cache_folder,
     )
 
     llm_cleaner = llm.bind(
@@ -88,4 +105,4 @@ def build_rag_agent(cfg: Config):
         synonyms=synonyms,
     )
 
-    return build_agent_graph(ctx)
+    return build_agent_graph(ctx, cfg)

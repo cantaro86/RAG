@@ -13,6 +13,7 @@ dependencies = [
     "build",
     "faiss-cpu",
     "fasttext",
+    "filelock",
     "gradio",
     "langchain==1.2.10",
     "langchain_community==0.4.1",
@@ -23,6 +24,8 @@ dependencies = [
     "langgraph==1.0.8",
     "numpy>=2.4.0",
     "openpyxl",
+    "pandas",
+    "python-dotenv",
     "pyyaml",
     "rich",
     "sacremoses",
@@ -44,7 +47,11 @@ dev = [
     "pytest",
     "jupyter",
     "debugpy",
-    "pynvml",
+    "nvidia-ml-py; sys_platform == 'linux'",
+    "psutil",
+]
+markdown = [
+    "docling",
 ]
 
 [dependency-groups]
@@ -55,7 +62,8 @@ dev = [
   "pytest",
   "jupyter",
   "debugpy",
-  "pynvml",
+  "nvidia-ml-py; sys_platform == 'linux'",
+  "psutil",
 ]
 
 
@@ -90,7 +98,7 @@ environments = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 extend-exclude = ["spack-repo/packages/py-agentic-rag/package.py"]
 
 [tool.ruff.lint]

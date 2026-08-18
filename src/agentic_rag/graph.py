@@ -6,10 +6,10 @@ from functools import partial
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from agentic_rag._load_env import cfg
+from agentic_rag.config_schema import Config
 from agentic_rag.dizionario import SynonymStore
 from agentic_rag.loggers import Logger
-from agentic_rag.state import GraphState
+from agentic_rag.state import GraphState, HistoryMessage
 from agentic_rag.utils import extract_source_filter, print_sources, render_context
 
 logger = Logger.get_logger(__name__)
@@ -39,23 +39,34 @@ class RAGContext:
 # ------------------------
 
 
-def push_memory(state, user_q, assistant_a):
-    msgs = state.get("history", [])
+def push_memory(
+    state: GraphState,
+    user_q: str,
+    assistant_a: str,
+    max_history_turns: int,
+) -> list[HistoryMessage]:
+    if max_history_turns == 0:
+        return []
 
-    msgs.append({"role": "user", "content": user_q})
-    msgs.append({"role": "assistant", "content": assistant_a})
+    msgs = list(state.get("history", []))
+    msgs.extend(
+        [
+            {"role": "user", "content": user_q},
+            {"role": "assistant", "content": assistant_a},
+        ]
+    )
 
-    msgs = msgs[-(cfg.max_history_turns * 2) :]
+    msgs = msgs[-(max_history_turns * 2) :]
 
     return msgs
 
 
-def format_history(history: list[dict]):
-    if not history:
+def format_history(history: list[HistoryMessage], max_history_turns: int) -> str:
+    if not history or max_history_turns == 0:
         return "No prior conversation."
     blocks = []
     # newest last (human likes chronological; model doesn’t care)
-    for m in history[-(cfg.max_history_turns * 2) :]:  # 6 turns == 12 entries
+    for m in history[-(max_history_turns * 2) :]:
         role = "Q" if m["role"] == "user" else "A"
         blocks.append(f"{role}: {m['content']}")
     return "\n".join(blocks)
@@ -69,9 +80,24 @@ def format_history(history: list[dict]):
 def sanitize_question(state: GraphState, sanitizer_chain):
     logger.debug("--- SANITIZE QUESTION ---")
     question = state["question"]
+    source_filter = extract_source_filter(question)
     sanitized = sanitizer_chain.invoke({"question": question})
+    source_filter = source_filter or extract_source_filter(sanitized)
     logger.debug(f"Sanitized question: {sanitized}")
-    return {**state, "question": sanitized}
+    return {
+        **state,
+        "question": sanitized,
+        "original_question": sanitized,
+        "documents": [],
+        "rewrite_count": 0,
+        "first_question": False,
+        "generation": None,
+        "topic_status": None,
+        "has_docs": False,
+        "guardrail_status": None,
+        "source_filter": source_filter,
+        "history": state.get("history", []),
+    }
 
 
 def guardrail(state: GraphState, guardrail_chain):
@@ -133,20 +159,16 @@ def init_first_question(state: GraphState) -> dict:
     return {
         **state,
         "first_question": first,
-        "rewrite_count": 0,
-        "has_docs": False,
-        "documents": [],
-        "generation": None,
     }
 
 
-def topic_detector(state, topic_continuity_classifier):
+def topic_detector(state, topic_continuity_classifier, max_history_turns: int):
     """
     Decide whether the new question belongs to the same topic as the recent conversation.
     """
 
     question = state["question"]
-    hist = format_history(state.get("history", []))
+    hist = format_history(state.get("history", []), max_history_turns)
 
     topic = topic_continuity_classifier.invoke({"question": question, "history": hist})
     topic = str(topic).strip().upper()
@@ -158,14 +180,14 @@ def topic_detector(state, topic_continuity_classifier):
     return {**state, "topic_status": topic}
 
 
-def pre_retrieval_rewriter(state, pre_retrieval_question_rewriter):
+def pre_retrieval_rewriter(state, pre_retrieval_question_rewriter, max_history_turns: int):
     """
     Resolve ambiguous references in the question before retrieval.
     Runs on followup turns only, using history to make the question self-contained.
     """
     logger.debug("---PRE-RETRIEVAL REWRITER---")
     question = state["question"]
-    hist = format_history(state.get("history", []))
+    hist = format_history(state.get("history", []), max_history_turns)
 
     rewritten = pre_retrieval_question_rewriter.invoke({"question": question, "history": hist})
     logger.debug(f"Pre-retrieval rewritten question: {rewritten}")
@@ -173,17 +195,24 @@ def pre_retrieval_rewriter(state, pre_retrieval_question_rewriter):
     return {**state, "question": rewritten}
 
 
-def retrieve_and_filter(state, retriever):
+def retrieve_and_filter(state, retriever, threshold: float, rerank: bool):
     logger.debug("---RETRIEVE + FILTER---")
     question = state["question"]
     rewrite_count = state.get("rewrite_count", 0)
 
-    source_filter = extract_source_filter(question) if rewrite_count == 0 else None
+    source_filter = state.get("source_filter")
+    if rewrite_count == 0 and source_filter is None:
+        source_filter = extract_source_filter(question)
     logger.debug(f"Source filter: {source_filter}")
 
     docs_en = retriever.invoke(question, filter=source_filter)
 
-    relevant_docs = [d for d in docs_en if float(d.metadata.get("rerank_score", 0)) > cfg.threshold]
+    if rerank:
+        relevant_docs = [
+            d for d in docs_en if "rerank_score" in d.metadata and float(d.metadata["rerank_score"]) > threshold
+        ]
+    else:
+        relevant_docs = list(docs_en)
 
     # score_prob = []
     # Debug info
@@ -195,17 +224,18 @@ def retrieve_and_filter(state, retriever):
         #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
         #     )
         sources_table = print_sources(relevant_docs)
-        logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} above threshold {cfg.threshold}")
+        logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} accepted (threshold={threshold})")
         # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
         logger.debug(f"Top sources:\n{sources_table}")
 
     if relevant_docs:
-        logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={cfg.threshold})")
+        logger.info(f"✅ Found {len(relevant_docs)} relevant docs (threshold={threshold})")
         return {
             **state,
             "documents": relevant_docs,
             "rewrite_count": 0,
             "has_docs": True,
+            "source_filter": source_filter,
         }
     else:
         logger.info(f"⚠️ No relevant docs found (attempt {rewrite_count + 1})")
@@ -214,6 +244,7 @@ def retrieve_and_filter(state, retriever):
             "documents": [],
             "rewrite_count": rewrite_count + 1,
             "has_docs": False,
+            "source_filter": source_filter,
         }
 
 
@@ -234,11 +265,9 @@ def generate_with_docs(state, rag_chain):
     rendered_docs = render_context(docs)
 
     answer = rag_chain.invoke({"context": rendered_docs, "question": q})
-    logger.info(f"Raw Generated answer (EN): {answer}")
+    logger.info(f"Raw generated answer: {answer}")
 
-    msgs = push_memory(state, q, answer)
-
-    return {**state, "generation": answer, "rewrite_count": 0, "history": msgs}
+    return {**state, "generation": answer, "rewrite_count": 0}
 
 
 _META_PATTERNS = re.compile(
@@ -264,32 +293,39 @@ _META_PATTERNS = re.compile(
     r"(le fonti|i documenti) (indicano|mostrano|riportano|suggeriscono|affermano)|"
     r"dal (contesto|materiale) (fornito|recuperato|disponibile)|"
     r"dai (documenti|testi|materiali) (forniti|recuperati|disponibili)|"
-    # Citation markers — [1], [doc1], [fonte 2], [sorgente3]
-    r"\[(doc|fonte|source|sorgente)?\s?\d+\]",
+    # Citation markers — [1], [doc1], [fonte 2], [sorgente3], (Doc 2)
+    r"\[(doc|fonte|source|sorgente)?\s?\d+\]|"
+    r"\((doc|fonte|source|sorgente)\s?\d+\)",
     flags=re.IGNORECASE,
 )
 
 
-def clean_answer(state, cleaner_chain):
+def clean_answer(
+    state: GraphState,
+    cleaner_chain,
+    clean_answer_enabled: bool,
+    max_history_turns: int,
+):
     logger.debug("--- CLEAN ANSWER ---")
 
-    if cfg.clean_answer is True:
-        raw_answer = state["generation"]
+    raw_answer = state["generation"]
+    final_answer = raw_answer
 
+    if clean_answer_enabled:
         if not _META_PATTERNS.search(raw_answer):
             logger.debug("Clean answer skipped (no meta-commentary detected).")
-            return state
+        else:
+            cleaned = cleaner_chain.invoke({"answer": raw_answer})
+            final_answer = cleaned.strip()
+            logger.info(f"Cleaned generated answer: {cleaned}")
 
-        cleaned = cleaner_chain.invoke({"answer": raw_answer})
-
-        logger.info(f"Cleaned Generated answer (EN): {cleaned}")
-
-        return {
-            **state,
-            "generation": cleaned.strip(),
-        }
-
-    return state
+    history = push_memory(
+        state,
+        state.get("original_question", state["question"]),
+        final_answer,
+        max_history_turns,
+    )
+    return {**state, "generation": final_answer, "history": history}
 
 
 def transform_query(state, question_transformer, synonyms):
@@ -395,7 +431,7 @@ def route_guardrail(state: GraphState) -> str:
 # ------------------------
 # Build Agent Graph
 # ------------------------
-def build_agent_graph(ctx: RAGContext):
+def build_agent_graph(ctx: RAGContext, cfg: Config):
     """Build the LangGraph agent"""
 
     checkpointer = InMemorySaver()
@@ -414,11 +450,27 @@ def build_agent_graph(ctx: RAGContext):
 
     workflow.add_node("init_first_question", init_first_question)
 
-    workflow.add_node("retrieve_and_filter", partial(retrieve_and_filter, retriever=ctx.retriever))
+    workflow.add_node(
+        "retrieve_and_filter",
+        partial(
+            retrieve_and_filter,
+            retriever=ctx.retriever,
+            threshold=cfg.threshold,
+            rerank=cfg.rerank,
+        ),
+    )
 
     workflow.add_node("generate_with_docs", partial(generate_with_docs, rag_chain=ctx.rag_chain))
 
-    workflow.add_node("clean_answer", partial(clean_answer, cleaner_chain=ctx.cleaner_chain))
+    workflow.add_node(
+        "clean_answer",
+        partial(
+            clean_answer,
+            cleaner_chain=ctx.cleaner_chain,
+            clean_answer_enabled=cfg.clean_answer,
+            max_history_turns=cfg.max_history_turns,
+        ),
+    )
 
     workflow.add_node(
         "transform_query",
@@ -430,12 +482,21 @@ def build_agent_graph(ctx: RAGContext):
     )
 
     workflow.add_node(
-        "topic_detector", partial(topic_detector, topic_continuity_classifier=ctx.topic_continuity_classifier)
+        "topic_detector",
+        partial(
+            topic_detector,
+            topic_continuity_classifier=ctx.topic_continuity_classifier,
+            max_history_turns=cfg.max_history_turns,
+        ),
     )
 
     workflow.add_node(
         "pre_retrieval_rewriter",
-        partial(pre_retrieval_rewriter, pre_retrieval_question_rewriter=ctx.pre_retrieval_question_rewriter),
+        partial(
+            pre_retrieval_rewriter,
+            pre_retrieval_question_rewriter=ctx.pre_retrieval_question_rewriter,
+            max_history_turns=cfg.max_history_turns,
+        ),
     )
 
     workflow.add_node("clear_history", clear_history)

@@ -29,10 +29,9 @@ Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependenci
 ```bash
 module load python3.14
 module load uv
-
-uv sync
-# or
-uv sync --group dev
+uv sync --locked
+# or, for development
+uv sync --locked --extra dev
 ```
 
 If you want to specify the Python version and the environment name (Not recommended):
@@ -41,7 +40,7 @@ If you want to specify the Python version and the environment name (Not recommen
 uv venv --prompt RAG ./uv-venv --python 3.14
 source ./uv-venv/bin/activate
 uv run --active which python
-uv run --active sync
+uv sync --active --locked --extra dev
 # or
 uv pip install -e .
 ```
@@ -79,7 +78,7 @@ PYTHONPATH=src python -m agentic_rag
 ```
 
 
-### Legacy installation instructions:
+### Pip compatibility
 
 Virtual environment:
 ```bash
@@ -88,13 +87,35 @@ python -m venv --prompt RAG ./python-venv
 source ./python-venv/bin/activate
 ```
 
-Install the package:
+Install the locked export, which includes this project and the development dependencies:
 ```bash
 python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
+Alternatively, let pip resolve dependencies directly from `pyproject.toml`:
+
+```bash
 python -m pip install -e .
 # or for developers
 python -m pip install -e ".[dev]"
+```
+
+`requirements.txt` is generated from `uv.lock` for Linux x86_64 and macOS 14+ ARM64. Hashes are omitted so pip can install the editable project entry. Regenerate it only after changing the lockfile:
+
+```bash
+uv export --locked --extra dev --no-hashes --output-file requirements.txt
+```
+
+
+### Conda compatibility
+
+`environment.yml` is a platform-neutral Conda-forge bootstrap for those targets. It installs Python 3.14 and `uv`; `uv` then creates the same locked project environment used by the recommended installation:
+
+```bash
+conda env create -f environment.yml
+conda activate RAG
+uv sync --locked --extra dev
 ```
 
 
@@ -125,7 +146,7 @@ spack spec py-agentic-rag +cuda cuda_arch=90
 module load conda
 salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=4 --gpus-per-node=1 --time=08:45:00 --nodelist=dgx01 --qos=mira
 conda activate RAG
-python -m debugpy --listen 0.0.0.0:5643 --wait-for-client main.py
+python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m agentic_rag
 ```
 
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -145,10 +166,6 @@ ssh -N -L 5643:dgx01:5643 dgx01
 We use faiss-cpu, but if we really want faiss gpu we can:
 conda install -c pytorch -c nvidia faiss-gpu=1.8.0  # H100 compatible
 This one installs numpy-base which is a numpy version 1.26.4 of conda. This may create conflicts.
-
-
-
-pip install -r requirements.txt --no-cache
 
 
 

@@ -22,6 +22,7 @@ Markdown_temp
 Output
 docs
 faiss_index
+performance_faiss_index
 notebooks_RAG
 temp_images
 notebooks
