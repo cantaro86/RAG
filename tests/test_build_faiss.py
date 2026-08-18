@@ -438,9 +438,14 @@ def test_load_vectorstore_supports_metal_resources_without_temp_memory(monkeypat
     monkeypatch.setattr(build_faiss_module, "build_embedder", MagicMock(return_value=object()))
     monkeypatch.setattr(build_faiss_module.FAISS, "load_local", MagicMock(return_value=vectorstore))
     monkeypatch.setattr(build_faiss_module.faiss, "get_num_gpus", MagicMock(return_value=1))
-    monkeypatch.setattr(build_faiss_module.faiss, "StandardGpuResources", MagicMock(return_value=resource))
+    monkeypatch.setattr(
+        build_faiss_module.faiss,
+        "StandardGpuResources",
+        MagicMock(return_value=resource),
+        raising=False,
+    )
     move = MagicMock(return_value="accelerated-index")
-    monkeypatch.setattr(build_faiss_module.faiss, "index_cpu_to_gpu", move)
+    monkeypatch.setattr(build_faiss_module.faiss, "index_cpu_to_gpu", move, raising=False)
 
     result = load_vectorstore(
         "index",
