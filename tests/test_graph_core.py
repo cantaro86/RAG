@@ -5,12 +5,15 @@ import pytest
 from langchain_core.documents import Document
 
 from agentic_rag.graph import (
+    RAGContext,
     clean_answer,
     format_history,
     generate_with_docs,
+    guardrail,
     pre_retrieval_rewriter,
     push_memory,
     retrieve_and_filter,
+    route_on_topic,
     sanitize_question,
     transform_query,
 )
@@ -21,10 +24,12 @@ pytestmark = pytest.mark.cpu
 
 
 def test_graph_state_requires_only_question():
+    """Verify graph state requires only question."""
     assert GraphState.__required_keys__ == frozenset({"question"})
 
 
 def test_sanitize_captures_filter_and_resets_transient_state_without_losing_history():
+    """Verify sanitize captures filter and resets transient state without losing history."""
     history = [
         {"role": "user", "content": "Domanda precedente"},
         {"role": "assistant", "content": "Risposta precedente"},
@@ -61,6 +66,7 @@ def test_sanitize_captures_filter_and_resets_transient_state_without_losing_hist
 
 
 def test_source_filter_survives_query_rewrite_and_retry():
+    """Verify source filter survives query rewrite and retry."""
     source_filter = {"source": PATIENT_DOC}
     retriever = MagicMock()
     retriever.invoke.return_value = []
@@ -82,6 +88,7 @@ def test_source_filter_survives_query_rewrite_and_retry():
 
 
 def test_source_filter_is_derived_from_first_rewritten_question_and_persisted_on_retry():
+    """Verify source filter is derived from first rewritten question and persisted on retry."""
     source_filter = {"source": PATIENT_DOC}
     pre_rewriter = MagicMock()
     pre_rewriter.invoke.return_value = "Cosa dicono le informazioni per pazienti?"
@@ -115,6 +122,7 @@ def test_source_filter_is_derived_from_first_rewritten_question_and_persisted_on
 
 
 def test_rerank_disabled_accepts_faiss_documents_without_scores_or_mutation():
+    """Verify rerank disabled accepts faiss documents without scores or mutation."""
     documents = [Document(page_content="uno", metadata={"source": "a.md"})]
     original_metadata = deepcopy(documents[0].metadata)
     retriever = MagicMock()
@@ -134,6 +142,7 @@ def test_rerank_disabled_accepts_faiss_documents_without_scores_or_mutation():
 
 
 def test_rerank_enabled_requires_score_and_applies_threshold():
+    """Verify rerank enabled requires score and applies threshold."""
     unscored = Document(page_content="senza punteggio", metadata={})
     low = Document(page_content="basso", metadata={"rerank_score": 0.2})
     high = Document(page_content="alto", metadata={"rerank_score": 0.8})
@@ -151,6 +160,7 @@ def test_rerank_enabled_requires_score_and_applies_threshold():
 
 
 def test_zero_history_disables_memory_and_push_does_not_mutate_input():
+    """Verify zero history disables memory and push does not mutate input."""
     history = [
         {"role": "user", "content": "prima"},
         {"role": "assistant", "content": "seconda"},
@@ -171,6 +181,7 @@ def test_zero_history_disables_memory_and_push_does_not_mutate_input():
 
 
 def test_history_uses_sanitized_question_and_final_cleaned_answer():
+    """Verify history uses sanitized question and final cleaned answer."""
     rag_chain = MagicMock()
     rag_chain.invoke.return_value = "Risposta grezza (Doc 2)"
     generated = generate_with_docs(
@@ -198,3 +209,69 @@ def test_history_uses_sanitized_question_and_final_cleaned_answer():
         {"role": "assistant", "content": "Risposta visibile"},
     ]
     cleaner.invoke.assert_called_once_with({"answer": "Risposta grezza (Doc 2)"})
+
+
+def test_rag_context_rejects_missing_dependencies():
+    """Verify graph context construction fails when any required dependency is absent."""
+    dependencies = {
+        "topic_continuity_classifier": MagicMock(),
+        "retriever": None,
+        "rag_chain": MagicMock(),
+        "sanitizer_chain": MagicMock(),
+        "cleaner_chain": MagicMock(),
+        "pre_retrieval_question_rewriter": MagicMock(),
+        "question_transformer": MagicMock(),
+        "guardrail_chain": MagicMock(),
+        "synonyms": MagicMock(),
+    }
+
+    with pytest.raises(ValueError, match="retriever"):
+        RAGContext(**dependencies)
+
+
+def test_guardrail_defaults_unexpected_classifier_output_to_on_topic():
+    """Verify malformed guardrail classifications follow the safe on-topic route."""
+    chain = MagicMock()
+    chain.invoke.return_value = "unexpected"
+
+    result = guardrail({"question": "domanda"}, chain)
+
+    assert result["guardrail_status"] == "ON_TOPIC"
+
+
+@pytest.mark.parametrize(
+    "status, expected",
+    [
+        ("SAME", "same"),
+        ("SAME_TOPIC", "same"),
+        ("STESSO", "same"),
+        ("NEW", "new"),
+        ("NEW_TOPIC", "new"),
+        ("NUOVO", "new"),
+        ("unexpected", "same"),
+        (None, "same"),
+    ],
+)
+def test_topic_router_supports_aliases_and_safe_default(status, expected):
+    """Verify topic routing recognizes every alias and defaults unknown values to same-topic."""
+    assert route_on_topic({"question": "domanda", "topic_status": status}) == expected
+
+
+def test_clean_answer_skips_cleaner_when_no_meta_commentary_is_present():
+    """Verify answer cleaning is bypassed when the generated text has no meta-commentary."""
+    cleaner = MagicMock()
+    state = {
+        "question": "domanda",
+        "original_question": "domanda originale",
+        "generation": "Risposta diretta.",
+        "history": [],
+    }
+
+    result = clean_answer(state, cleaner, clean_answer_enabled=True, max_history_turns=1)
+
+    assert result["generation"] == "Risposta diretta."
+    assert result["history"] == [
+        {"role": "user", "content": "domanda originale"},
+        {"role": "assistant", "content": "Risposta diretta."},
+    ]
+    cleaner.invoke.assert_not_called()

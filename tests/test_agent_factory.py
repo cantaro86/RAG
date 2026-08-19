@@ -12,6 +12,7 @@ pytestmark = pytest.mark.cpu
 
 
 def test_build_rag_agent_forwards_passed_config(monkeypatch):
+    """Verify build rag agent forwards passed config."""
     data = make_valid_config()
     data.update(
         {
@@ -71,3 +72,16 @@ def test_build_rag_agent_forwards_passed_config(monkeypatch):
     }
     build_agent_graph.assert_called_once()
     assert build_agent_graph.call_args.args[1] is cfg
+
+    context = build_agent_graph.call_args.args[0]
+    llm.invoke.return_value = {"content": "model output"}
+    chain_inputs = [
+        (context.topic_continuity_classifier, {"question": "q", "history": "h"}),
+        (context.rag_chain, {"question": "q", "context": "c"}),
+        (context.sanitizer_chain, {"question": "q"}),
+        (context.cleaner_chain, {"answer": "a"}),
+        (context.pre_retrieval_question_rewriter, {"question": "q", "history": "h"}),
+        (context.question_transformer, {"question": "q", "matched_terms": {}}),
+        (context.guardrail_chain, {"question": "q"}),
+    ]
+    assert [chain.invoke(values) for chain, values in chain_inputs] == ["model output"] * len(chain_inputs)

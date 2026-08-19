@@ -42,6 +42,7 @@ def _standard_backend(monkeypatch):
 
 
 def test_standard_backend_honors_explicit_offline_debugger_and_bind(monkeypatch):
+    """Verify standard backend honors explicit offline debugger and bind."""
     tokenizer, tokenizer_loader, model_loader, generator, _pipeline_factory = _standard_backend(monkeypatch)
     debug = MagicMock()
     monkeypatch.setattr(llm_build.logger, "debug", debug)
@@ -71,6 +72,7 @@ def test_standard_backend_honors_explicit_offline_debugger_and_bind(monkeypatch)
 
 
 def test_non_mistral_tokenizer_type_error_is_not_masked(monkeypatch):
+    """Verify non mistral tokenizer type error is not masked."""
     monkeypatch.setattr(llm_build, "DEVICE", "cpu")
     original_error = TypeError("tokenizer implementation failed")
     tokenizer_loader = MagicMock(side_effect=original_error)
@@ -84,6 +86,7 @@ def test_non_mistral_tokenizer_type_error_is_not_masked(monkeypatch):
 
 
 def test_mistral_regex_fallback_only_retries_unsupported_keyword(monkeypatch):
+    """Verify mistral regex fallback only retries unsupported keyword."""
     tokenizer = MagicMock(eos_token_id=2)
     tokenizer.apply_chat_template.return_value = "prompt"
     tokenizer_loader = MagicMock(side_effect=[TypeError("unexpected keyword argument 'fix_mistral_regex'"), tokenizer])
@@ -100,6 +103,7 @@ def test_mistral_regex_fallback_only_retries_unsupported_keyword(monkeypatch):
 
 
 def test_mlx_uses_single_prequantized_load_and_honors_sampling_controls(monkeypatch):
+    """Verify mlx uses single prequantized load and honors sampling controls."""
     tokenizer = MagicMock()
     tokenizer.apply_chat_template.return_value = "mlx prompt"
     model = object()
@@ -143,6 +147,7 @@ def test_mlx_uses_single_prequantized_load_and_honors_sampling_controls(monkeypa
 
 
 def test_mlx_sampling_passes_top_k_when_enabled(monkeypatch):
+    """Verify mlx sampling passes top k when enabled."""
     tokenizer = MagicMock()
     tokenizer.apply_chat_template.return_value = "prompt"
     monkeypatch.setattr(llm_build, "DEVICE", "mps")
@@ -170,6 +175,7 @@ def test_mlx_sampling_passes_top_k_when_enabled(monkeypatch):
 
 
 def test_mlx_unavailable_preserves_import_error(monkeypatch):
+    """Verify mlx unavailable preserves import error."""
     import_error = ImportError("missing MLX dependency")
     monkeypatch.setattr(llm_build, "DEVICE", "mps")
     monkeypatch.setattr(llm_build, "MLX_AVAILABLE", False)
@@ -183,6 +189,7 @@ def test_mlx_unavailable_preserves_import_error(monkeypatch):
 
 
 def test_mlx_quantization_rejects_ordinary_model_config(monkeypatch):
+    """Verify mlx quantization rejects ordinary model config."""
     tokenizer_loader = MagicMock()
     mlx_load = MagicMock()
     monkeypatch.setattr(llm_build, "DEVICE", "mps")
@@ -199,6 +206,7 @@ def test_mlx_quantization_rejects_ordinary_model_config(monkeypatch):
 
 
 def test_mlx_fails_clearly_for_nonzero_no_repeat_ngram(monkeypatch):
+    """Verify mlx fails clearly for nonzero no repeat ngram."""
     mlx_load = MagicMock()
     monkeypatch.setattr(llm_build, "DEVICE", "mps")
     monkeypatch.setattr(llm_build, "hf_online_enabled", lambda online: online)
@@ -221,11 +229,13 @@ def test_mlx_fails_clearly_for_nonzero_no_repeat_ngram(monkeypatch):
     ],
 )
 def test_mlx_rejects_unsupported_quantization_metadata(model_config):
+    """Verify mlx rejects unsupported quantization metadata."""
     with pytest.raises(ValueError, match="quantization"):
         llm_build._validate_mlx_quantization_config(model_config)
 
 
 def test_mlx_reads_remote_metadata_with_explicit_offline_cache(monkeypatch, tmp_path):
+    """Verify mlx reads remote metadata with explicit offline cache."""
     config_path = tmp_path / "config.json"
     model_config = {"quantization": {"bits": 4, "group_size": 64}}
     config_path.write_text(json.dumps(model_config), encoding="utf-8")
@@ -251,6 +261,7 @@ def test_mlx_reads_remote_metadata_with_explicit_offline_cache(monkeypatch, tmp_
 
 
 def test_mlx_reads_local_metadata_without_hub_access(monkeypatch, tmp_path):
+    """Verify mlx reads local metadata without hub access."""
     model_dir = tmp_path / "mlx-model"
     model_dir.mkdir()
     model_config = {"quantization_config": {"quant_method": "compressed-tensors"}}
@@ -263,6 +274,7 @@ def test_mlx_reads_local_metadata_without_hub_access(monkeypatch, tmp_path):
 
 
 def test_mlx_passes_mistral_tokenizer_fix_to_pinned_load_api(monkeypatch):
+    """Verify mlx passes mistral tokenizer fix to pinned load api."""
     tokenizer = MagicMock()
     mlx_load = MagicMock(return_value=(object(), tokenizer))
     monkeypatch.setattr(llm_build, "DEVICE", "mps")
@@ -294,6 +306,7 @@ def test_mlx_passes_mistral_tokenizer_fix_to_pinned_load_api(monkeypatch):
 
 
 def test_translator_explicit_offline_mode_uses_local_cache(monkeypatch):
+    """Verify translator explicit offline mode uses local cache."""
     tokenizer = object()
     model = MagicMock()
     tokenizer_loader = MagicMock(return_value=tokenizer)

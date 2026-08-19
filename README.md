@@ -46,6 +46,30 @@ uv pip install -e .
 ```
 
 
+### Tests and coverage
+
+Run the CPU test suite from the repository root:
+
+```bash
+uv run pytest -m cpu
+```
+
+To run a specific test file, append its path, for example:
+
+```bash
+uv run pytest -m cpu tests/test_guardrail.py
+```
+
+Run the tests with branch coverage and display the source-only report:
+
+```bash
+uv run coverage run -m pytest -m cpu
+uv run coverage report
+```
+
+Coverage is configured in `pyproject.toml` for `src/agentic_rag` and must remain at or above 85%.
+
+
 ### Run the program
 Cluster allocation:
 ```bash

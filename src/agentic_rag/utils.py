@@ -16,12 +16,12 @@ PATIENT_DOC = "Informazioni_per_pazienti.md"
 _CORPUS_FILTER_PATTERNS = [
     (
         re.compile(
-            r"information[\s_]*for[\s_]*patients?|"
-            r"patient[\s_]*information|"
-            r"informazioni[\s_]*per[\s_]*pazienti|"
-            r"informazioni_per_pazienti|"
-            r"informativa[\s_]*per[\s_]*pazienti|"
-            r"informativa_per_pazienti",
+            r"(?<!\w)(?:"
+            r"information[\s_]+for[\s_]+patients?|"
+            r"patient[\s_]+information|"
+            r"informazioni[\s_]+per(?:[\s_]+i)?[\s_]+pazienti|"
+            r"informativa[\s_]+per(?:[\s_]+i)?[\s_]+pazienti"
+            r")(?!\w)",
             re.IGNORECASE,
         ),
         {"source": PATIENT_DOC},
@@ -32,7 +32,7 @@ _CORPUS_FILTER_PATTERNS = [
 def extract_source_filter(question: str) -> dict | None:
     for pattern, filt in _CORPUS_FILTER_PATTERNS:
         if pattern.search(question):
-            return filt
+            return dict(filt)
     return None
 
 

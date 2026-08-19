@@ -119,3 +119,13 @@ markers = [
     "cpu: tests that run on CPU only",
     "gpu: tests that require GPU",
 ]
+
+
+[tool.coverage.run]
+branch = true
+source = ["agentic_rag"]
+omit = ["*/agentic_rag/_version.py"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
