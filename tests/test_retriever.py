@@ -95,8 +95,9 @@ def test_cross_encoder_uses_supported_cache_and_local_only_arguments(monkeypatch
         "rerank-model",
         device=retriever_module.DEVICE,
         max_length=2048,
-        cache_folder="/configured/cache",
         local_files_only=not effective_online,
+        model_kwargs={"cache_dir": "/configured/cache"},
+        processor_kwargs={"cache_dir": "/configured/cache"},
     )
     policy.assert_called_once_with(online)
 

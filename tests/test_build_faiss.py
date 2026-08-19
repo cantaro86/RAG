@@ -440,8 +440,12 @@ def test_build_embedder_uses_effective_online_policy(monkeypatch, online, effect
     build_embedder("embed-model", online=online, cache_folder="/configured/cache")
 
     policy.assert_called_once_with(online)
-    assert embeddings.call_args.kwargs["model_kwargs"]["local_files_only"] is not effective_online
-    assert embeddings.call_args.kwargs["cache_folder"] == "/configured/cache"
+    model_kwargs = embeddings.call_args.kwargs["model_kwargs"]
+    assert model_kwargs["local_files_only"] is not effective_online
+    assert model_kwargs["model_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert model_kwargs["processor_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert model_kwargs["config_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert "cache_folder" not in embeddings.call_args.kwargs
 
 
 def test_load_vectorstore_uses_explicit_gpu_flag(monkeypatch):

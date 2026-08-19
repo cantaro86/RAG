@@ -440,12 +440,14 @@ def build_embedder(
 
     return HuggingFaceEmbeddings(
         model_name=model_name,
-        cache_folder=cache_folder,
         encode_kwargs={"normalize_embeddings": True},
         model_kwargs={
             "device": DEVICE,
             "trust_remote_code": True,
             "local_files_only": local_files_only,
+            "model_kwargs": {"cache_dir": cache_folder},
+            "processor_kwargs": {"cache_dir": cache_folder},
+            "config_kwargs": {"cache_dir": cache_folder},
         },
     )
 

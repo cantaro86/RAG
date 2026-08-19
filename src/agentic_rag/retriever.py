@@ -29,8 +29,9 @@ class MPSSentenceCrossEncoder(BaseCrossEncoder):
             model_name,
             device=self.device,
             max_length=2048,
-            cache_folder=cache_folder,
             local_files_only=not hf_online_enabled(online),
+            model_kwargs={"cache_dir": cache_folder},
+            processor_kwargs={"cache_dir": cache_folder},
         )
 
     def score(self, pairs: list[tuple[str, str]]) -> list[float]:
