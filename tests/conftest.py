@@ -1,4 +1,5 @@
 # tests/conftest.py
+import logging
 import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -8,6 +9,26 @@ from langchain_core.documents import Document
 
 from agentic_rag.config_schema import Config, load_config
 from agentic_rag.graph import RAGContext
+
+_ORIGINAL_LOGGING_DISABLE_LEVEL = logging.root.manager.disable
+logging.disable(logging.CRITICAL)
+
+
+def pytest_unconfigure(config) -> None:
+    """Restore the process logging state after pytest finishes."""
+    logging.disable(_ORIGINAL_LOGGING_DISABLE_LEVEL)
+
+
+@pytest.fixture
+def enabled_test_logging():
+    """Temporarily enable logging for tests that verify handler output."""
+    previous_level = logging.root.manager.disable
+    logging.disable(logging.NOTSET)
+    try:
+        yield
+    finally:
+        logging.disable(previous_level)
+
 
 # ---------------------------------------------------------------------------
 # Fixtures config

@@ -448,7 +448,7 @@ def test_logger_initialization_is_thread_safe(monkeypatch):
     target.handlers.clear()
 
 
-def test_file_logger_creates_parent_directories(monkeypatch, tmp_path):
+def test_file_logger_creates_parent_directories(monkeypatch, tmp_path, enabled_test_logging):
     """Verify file logger creates parent directories."""
     log_path = tmp_path / "nested" / "logs" / "runtime.log"
     monkeypatch.setattr(loggers.cfg, "log_level", "INFO")
