@@ -55,6 +55,14 @@ def build_parser() -> argparse.ArgumentParser:
     score.add_argument("--evaluation-config", type=Path, default=DEFAULT_EVALUATION_CONFIG)
     score.add_argument("--limit", type=positive_integer)
     score.add_argument("--overwrite", action="store_true")
+
+    export_excel = subparsers.add_parser(
+        "export-excel",
+        help="Export a collected run and its RAGAS scores to a formatted Excel workbook",
+    )
+    export_excel.add_argument("run_dir", type=Path)
+    export_excel.add_argument("--output", type=Path)
+    export_excel.add_argument("--overwrite", action="store_true")
     return parser
 
 
@@ -247,6 +255,14 @@ def score_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def export_excel_command(args: argparse.Namespace) -> int:
+    from evaluation.export_excel import export_run_to_excel
+
+    output_path = export_run_to_excel(args.run_dir, args.output, overwrite=args.overwrite)
+    print(f"Excel evaluation report: {output_path}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     os.chdir(REPO_ROOT)
     args = build_parser().parse_args(argv)
@@ -256,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
         return collect_command(args)
     if args.command == "score":
         return score_command(args)
+    if args.command == "export-excel":
+        return export_excel_command(args)
     raise ValueError(f"Unknown command: {args.command}")
 
 

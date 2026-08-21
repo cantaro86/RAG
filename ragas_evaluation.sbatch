@@ -39,4 +39,8 @@ uv run --locked --extra evaluation python -m evaluation score \
     "${RESULTS_DIR}/${RUN_ID}" \
     "${LIMIT_ARGS[@]}"
 
+printf '\n===== EXPORT EXCEL =====\n'
+uv run --locked python -m evaluation export-excel \
+    "${RESULTS_DIR}/${RUN_ID}"
+
 printf '\n===== EVALUATION COMPLETE =====\n'
