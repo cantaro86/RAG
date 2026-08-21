@@ -186,9 +186,7 @@ def test_validate_command_does_not_load_models(tmp_path, capsys):
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(evaluation_config_data()), encoding="utf-8")
 
-    result = evaluation_main(
-        ["validate", "--questions", str(questions_path), "--evaluation-config", str(config_path)]
-    )
+    result = evaluation_main(["validate", "--questions", str(questions_path), "--evaluation-config", str(config_path)])
 
     assert result == 0
     assert "No application or evaluator model was loaded." in capsys.readouterr().out
@@ -280,7 +278,7 @@ def test_collect_question_keeps_partial_trace_after_failure():
     agent.checkpointer.delete_thread.assert_called_once()
 
 
-def test_collect_dataset_writes_incremental_artifacts(tmp_path):
+def test_collect_dataset_writes_incremental_artifacts(tmp_path, capsys):
     document = Document(page_content="Contesto", metadata={"source": "source.md"})
     agent = FakeAgent(
         {"generation": "Risposta finale", "documents": [document], "has_docs": True},
@@ -300,6 +298,7 @@ def test_collect_dataset_writes_incremental_artifacts(tmp_path):
     assert stat.S_IMODE(run_dir.stat().st_mode) == 0o700
     assert stat.S_IMODE((run_dir / "samples.jsonl").stat().st_mode) == 0o600
     assert stat.S_IMODE((run_dir / samples[0]["trace_path"]).stat().st_mode) == 0o600
+    assert "Collecting questions" in capsys.readouterr().err
     with pytest.raises(FileExistsError):
         collect_dataset(agent, questions, run_dir)
 
@@ -389,7 +388,7 @@ def test_collect_question_records_failed_langgraph_task():
     assert outcome.trace["diagnostics"]["failed_nodes"] == ["failing_node"]
 
 
-def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypatch):
+def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypatch, capsys):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     samples = [
@@ -406,9 +405,7 @@ def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypa
             "retrieved_contexts": [],
         },
     ]
-    (run_dir / "samples.jsonl").write_text(
-        "".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8"
-    )
+    (run_dir / "samples.jsonl").write_text("".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8")
     (run_dir / "summary.json").write_text('{"schema_version": 1, "collection": {}}\n', encoding="utf-8")
     (run_dir / "run.json").write_text('{"status": "collected"}\n', encoding="utf-8")
     config_data = evaluation_config_data()
@@ -437,6 +434,9 @@ def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypa
     score_records = load_jsonl(run_dir / "scores.jsonl")
     assert score_records[1]["skipped"]["faithfulness"] == "No retrieved contexts"
     assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "scored"
+    captured = capsys.readouterr()
+    assert "RAGAS metrics ready" in captured.out
+    assert "Scoring metrics" in captured.err
 
 
 def test_score_dataset_fails_clearly_when_no_metric_can_be_scored(tmp_path, monkeypatch):
@@ -516,9 +516,7 @@ def test_limited_score_run_is_marked_partial(tmp_path, monkeypatch):
         {"id": "q1", "user_input": "Uno", "response": "Risposta", "retrieved_contexts": []},
         {"id": "q2", "user_input": "Due", "response": "Risposta", "retrieved_contexts": []},
     ]
-    (run_dir / "samples.jsonl").write_text(
-        "".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8"
-    )
+    (run_dir / "samples.jsonl").write_text("".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8")
     (run_dir / "run.json").write_text('{"status": "collected"}\n', encoding="utf-8")
     config_data = evaluation_config_data()
     config_data["metrics"] = ["answer_relevancy"]

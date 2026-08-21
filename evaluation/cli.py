@@ -69,8 +69,7 @@ def _require_accelerator(command: str) -> str:
     if cuda_available:
         return "cuda"
     raise RuntimeError(
-        f"The `{command}` command requires a CUDA or MPS accelerator. "
-        "Allocate a GPU node before running it."
+        f"The `{command}` command requires a CUDA or MPS accelerator. Allocate a GPU node before running it."
     )
 
 
@@ -127,7 +126,7 @@ def _mark_run_failed(run_dir: Path, status: str, error: Exception) -> None:
             }
         )
         write_json(run_path, manifest)
-    except (OSError, TypeError, ValueError):
+    except OSError, TypeError, ValueError:
         return
 
 
@@ -147,7 +146,7 @@ def collect_command(args: argparse.Namespace) -> int:
     if args.limit is not None:
         questions = questions[: args.limit]
     _secure_runtime_environment()
-    _require_accelerator("collect")
+    accelerator = _require_accelerator("collect")
 
     from agentic_rag._load_env import CONFIG_PATH, cfg
     from agentic_rag.agent_factory import build_rag_agent
@@ -159,7 +158,13 @@ def collect_command(args: argparse.Namespace) -> int:
     if run_dir.exists():
         raise FileExistsError(f"Evaluation run already exists: {run_dir}")
 
+    print(
+        f"Collection run {run_id}: {len(questions)} questions on {accelerator}; results: {run_dir}",
+        flush=True,
+    )
+    print("Loading application models...", flush=True)
     agent = build_rag_agent(cfg)
+    print("Application models ready. Starting question collection.", flush=True)
 
     def validate_italian(question: str) -> str:
         return DetectLanguage(question, online=cfg.online).text
@@ -200,6 +205,12 @@ def score_command(args: argparse.Namespace) -> int:
         raise FileExistsError(f"Scores already exist: {scores_path}. Pass --overwrite to replace them.")
     _secure_runtime_environment()
     embedding_device = _require_accelerator("score")
+    sample_count = min(len(samples), args.limit) if args.limit is not None else len(samples)
+    print(
+        f"Scoring {sample_count} of {len(samples)} samples on {embedding_device}; run: {args.run_dir.resolve()}",
+        flush=True,
+    )
+    print(f"Loading judge model: {config.judge.model}", flush=True)
 
     try:
         from agentic_rag._load_env import cfg, hf_hub_cache_for
@@ -219,6 +230,7 @@ def score_command(args: argparse.Namespace) -> int:
             online=config.judge.online,
             cache_folder=cache_folder,
         ).bind(do_sample=False)
+        print("Judge model ready. Initializing RAGAS metrics.", flush=True)
         summary = score_dataset(
             args.run_dir,
             config,

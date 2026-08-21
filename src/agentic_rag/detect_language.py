@@ -8,12 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from filelock import FileLock
-from langdetect import detect_langs
+from langdetect import DetectorFactory, detect_langs
 
 from agentic_rag._load_env import EFFECTIVE_HF_HOME, PROJECT_ROOT, hf_online_enabled
 from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
+
+# langdetect otherwise varies probabilities between processes for short text.
+DetectorFactory.seed = 0
 
 FASTTEXT_MODEL_NAME = "lid.176.ftz"
 FASTTEXT_MODEL_URL = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
@@ -143,6 +146,8 @@ class DetectLanguage:
         "come",
         "stai",
     }
+    ITALIAN_STRONG_WORDS = {"addio", "arrivederci", "ciao", "grazie"}
+    ITALIAN_SHORT_PHRASES = {("fa", "male")}
 
     def __init__(self, text: str, *, online: bool | None = None):
         self.text = text.strip()
@@ -160,12 +165,21 @@ class DetectLanguage:
             model = get_fasttext_model(online=self.online)
         except Exception:
             return self._robust_detect(text)
-        return self._detect_fasttext(text, model)
+        fasttext_lang = self._detect_fasttext(text, model)
+        if fasttext_lang == "it":
+            return fasttext_lang
+        fallback_lang = self._robust_detect(text)
+        return fallback_lang if fallback_lang == "it" else fasttext_lang
 
     def _italian_heuristic(self, text: str) -> bool:
         normalized = text.casefold()
-        words = set(_WORD_RE.findall(normalized))
-        return bool(words & self.ITALIAN_WORDS) or any(character in normalized for character in "èéòàìù")
+        words = tuple(_WORD_RE.findall(normalized))
+        return (
+            words in self.ITALIAN_SHORT_PHRASES
+            or bool(set(words) & self.ITALIAN_STRONG_WORDS)
+            or (len(words) == 1 and words[0] in self.ITALIAN_WORDS)
+            or any(character in normalized for character in "èéòàìù")
+        )
 
     def _detect_simple_heuristic(self, text: str) -> str | None:
         """Apply token-based rules to very short text."""
@@ -175,7 +189,7 @@ class DetectLanguage:
         """Use FastText for reliable detection, including short text."""
         logger.debug("FastText detection")
 
-        if len(text.split()) < 2:
+        if len(text.split()) <= 2:
             heuristic_lang = self._detect_simple_heuristic(text)
             if heuristic_lang:
                 return heuristic_lang
@@ -193,6 +207,8 @@ class DetectLanguage:
             prediction = model.predict(clean_text)
         logger.debug("FastText prediction: %s", prediction)
 
+        if not prediction[0] or not prediction[1]:
+            return self._robust_detect(text)
         if prediction[1][0] < self.FASTTEXT_CONFIDENCE_THRESHOLD:
             return self._robust_detect(text)
 
@@ -203,7 +219,7 @@ class DetectLanguage:
         """Use langdetect and token-based rules when FastText is unavailable."""
         logger.debug("Robust detection")
 
-        if len(text.split()) < 2:
+        if len(text.split()) <= 2:
             heuristic_lang = self._detect_simple_heuristic(text)
             if heuristic_lang:
                 return heuristic_lang
@@ -211,6 +227,8 @@ class DetectLanguage:
         try:
             langs = detect_langs(text)
             best = max(langs, key=lambda result: result.prob)
+            if best.lang == "it":
+                return best.lang
             if best.prob < 0.8:
                 return self._heuristic_detect(text)
             return best.lang

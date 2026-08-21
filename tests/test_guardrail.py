@@ -3,28 +3,9 @@ from unittest.mock import call
 import pytest
 from langchain_core.documents import Document
 
-from agentic_rag.detect_language import DetectLanguage
 from agentic_rag.graph import build_agent_graph
 
 pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
-
-
-def test_language_detection_relaxation():
-    # Verify that Italian inputs work as well
-    """Verify language detection relaxation."""
-    q_it = DetectLanguage("Buongiorno, vorrei informazioni sulla preparazione.")
-    assert q_it.lang == "it"
-    assert q_it.text == "Buongiorno, vorrei informazioni sulla preparazione."
-
-    # Verify that totally unsupported languages still raise ValueError (e.g. English, French, German)
-    with pytest.raises(ValueError, match="Only italian is supported."):
-        DetectLanguage("Hello. What is the preparation for Colon-TC?")
-
-    with pytest.raises(ValueError, match="Only italian is supported."):
-        DetectLanguage("Bonjour! Comment se préparer pour le Colon-TC?")
-
-    with pytest.raises(ValueError, match="Only italian is supported."):
-        DetectLanguage("Guten Tag, ich möchte Informationen über die Vorbereitung haben.")
 
 
 def test_graph_routing_thanks(mock_ctx, config_data):

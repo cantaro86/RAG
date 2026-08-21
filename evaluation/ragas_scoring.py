@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
+from tqdm import tqdm
 
 from evaluation.tracing import EvaluationConfig, load_jsonl, utc_now, write_json
 
@@ -101,8 +102,7 @@ def build_ragas_judge(llm: BindableLLM, *, max_retries: int):
         from ragas.llms.base import InstructorBaseRagasLLM
     except ImportError as error:
         raise RuntimeError(
-            "RAGAS evaluation dependencies are unavailable. Install them with "
-            "`uv sync --locked --extra evaluation`."
+            "RAGAS evaluation dependencies are unavailable. Install them with `uv sync --locked --extra evaluation`."
         ) from error
 
     delegate = LocalStructuredJudge(llm, max_retries=max_retries)
@@ -122,8 +122,7 @@ def _build_metrics(config: EvaluationConfig, judge, *, cache_folder: str, embedd
         from ragas.metrics.collections import AnswerRelevancy, ContextUtilization, Faithfulness
     except ImportError as error:
         raise RuntimeError(
-            "RAGAS evaluation dependencies are unavailable. Install them with "
-            "`uv sync --locked --extra evaluation`."
+            "RAGAS evaluation dependencies are unavailable. Install them with `uv sync --locked --extra evaluation`."
         ) from error
 
     metrics: dict[str, Any] = {}
@@ -135,6 +134,10 @@ def _build_metrics(config: EvaluationConfig, judge, *, cache_folder: str, embedd
         elif metric_name == "answer_relevancy":
             from ragas.embeddings.huggingface_provider import HuggingFaceEmbeddings
 
+            print(
+                f"Loading embedding model: {config.embeddings.model} on {embedding_device}",
+                flush=True,
+            )
             embeddings = HuggingFaceEmbeddings(
                 model=config.embeddings.model,
                 use_api=False,
@@ -200,6 +203,7 @@ def score_dataset(
 
     judge = build_ragas_judge(llm, max_retries=config.judge.max_retries)
     metrics = _build_metrics(config, judge, cache_folder=cache_folder, embedding_device=embedding_device)
+    print(f"RAGAS metrics ready: {', '.join(metrics)}", flush=True)
     scores_path.write_text("", encoding="utf-8")
     scores_path.chmod(0o600)
 
@@ -207,35 +211,44 @@ def score_dataset(
     errors: dict[str, int] = {name: 0 for name in metrics}
     skipped: dict[str, int] = {name: 0 for name in metrics}
 
-    for sample in samples:
-        sample_id, user_input, response, contexts = _validate_sample(sample)
-        score_record: dict[str, Any] = {"id": sample_id, "metrics": {}, "errors": {}, "skipped": {}}
-        for metric_name, metric in metrics.items():
-            if metric_name in {"faithfulness", "context_utilization"} and not contexts:
-                score_record["metrics"][metric_name] = None
-                score_record["skipped"][metric_name] = "No retrieved contexts"
-                skipped[metric_name] += 1
-                continue
-            kwargs = {"user_input": user_input, "response": response}
-            if metric_name in {"faithfulness", "context_utilization"}:
-                kwargs["retrieved_contexts"] = contexts
-            try:
-                result = metric.score(**kwargs)
-                value = float(result.value)
-                if not math.isfinite(value):
-                    raise ValueError(f"Metric returned a non-finite score: {value}")
-                score_record["metrics"][metric_name] = value
-                values[metric_name].append(value)
-            except Exception as error:
-                score_record["metrics"][metric_name] = None
-                score_record["errors"][metric_name] = {"type": type(error).__name__, "message": str(error)}
-                errors[metric_name] += 1
+    operation_count = len(samples) * len(metrics)
+    with tqdm(total=operation_count, desc="Scoring metrics", unit="metric") as progress:
+        for sample_number, sample in enumerate(samples, 1):
+            sample_id, user_input, response, contexts = _validate_sample(sample)
+            score_record: dict[str, Any] = {"id": sample_id, "metrics": {}, "errors": {}, "skipped": {}}
+            for metric_name, metric in metrics.items():
+                progress.set_postfix(
+                    sample=f"{sample_number}/{len(samples)}",
+                    question=sample_id,
+                    metric=metric_name,
+                )
+                try:
+                    if metric_name in {"faithfulness", "context_utilization"} and not contexts:
+                        score_record["metrics"][metric_name] = None
+                        score_record["skipped"][metric_name] = "No retrieved contexts"
+                        skipped[metric_name] += 1
+                        continue
+                    kwargs = {"user_input": user_input, "response": response}
+                    if metric_name in {"faithfulness", "context_utilization"}:
+                        kwargs["retrieved_contexts"] = contexts
+                    result = metric.score(**kwargs)
+                    value = float(result.value)
+                    if not math.isfinite(value):
+                        raise ValueError(f"Metric returned a non-finite score: {value}")
+                    score_record["metrics"][metric_name] = value
+                    values[metric_name].append(value)
+                except Exception as error:
+                    score_record["metrics"][metric_name] = None
+                    score_record["errors"][metric_name] = {"type": type(error).__name__, "message": str(error)}
+                    errors[metric_name] += 1
+                finally:
+                    progress.update()
 
-        with scores_path.open("a", encoding="utf-8") as output:
-            output.write(
-                json.dumps(score_record, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n"
-            )
-            output.flush()
+            with scores_path.open("a", encoding="utf-8") as output:
+                output.write(
+                    json.dumps(score_record, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n"
+                )
+                output.flush()
 
     metric_summary = {
         name: {

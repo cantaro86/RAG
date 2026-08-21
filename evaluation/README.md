@@ -47,6 +47,10 @@ Set `LIMIT` for a smoke run or `RUN_ID` for a custom result directory:
 LIMIT=1 RUN_ID=smoke sbatch ragas_evaluation.sbatch
 ```
 
+The batch script uses unbuffered Python output. Phase and model-loading messages are written to
+`ragas-<job-id>.out`; collection and per-metric `tqdm` progress, including elapsed time and ETA, are written to
+`ragas-<job-id>.err`. Progress identifies questions by stable ID without printing their text.
+
 ## Artifacts
 
 Each collection creates an immutable directory under `evaluation/results/`:

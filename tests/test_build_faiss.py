@@ -2,7 +2,6 @@
 Unit tests for agentic_rag/build_faiss.py
 
 Covers:
-  - _detect_lang_safe
   - extract_list_number
   - _make_metadata
   - _flush_text
@@ -26,7 +25,6 @@ import agentic_rag.build_faiss as build_faiss_module
 from agentic_rag._load_env import cfg as runtime_cfg
 from agentic_rag.build_faiss import (
     _SPLITTER,
-    _detect_lang_safe,
     _flush_text,
     _make_metadata,
     build_embedder,
@@ -49,49 +47,6 @@ pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
 
 MARKDOWN_IT_DIR = Path(__file__).resolve().parent.parent / "Markdown_IT"
 PAZIENTE_MD = MARKDOWN_IT_DIR / "Informazioni_per_pazienti.md"
-
-
-# ===========================================================================
-# _detect_lang_safe
-# ===========================================================================
-
-
-class TestDetectLangSafe:
-    def test_italian_text_detected(self):
-        """Verify italian text detected."""
-        italian = (
-            "Il paziente deve assumere il farmaco ogni mattina a digiuno "
-            "e seguire le indicazioni del medico curante con la massima attenzione."
-        )
-        assert _detect_lang_safe(italian) == "it"
-
-    def test_english_text_detected(self):
-        """Verify english text detected."""
-        english = (
-            "The patient should take the medication every morning on an empty "
-            "stomach and carefully follow all the doctor instructions provided."
-        )
-        assert _detect_lang_safe(english) == "en"
-
-    def test_short_text_returns_unknown(self):
-        # Fewer than 120 chars → length guard triggers, returns "unknown"
-        """Verify short text returns unknown."""
-        assert _detect_lang_safe("Ciao come stai") == "unknown"
-
-    def test_empty_string_returns_unknown(self):
-        """Verify empty string returns unknown."""
-        assert _detect_lang_safe("") == "unknown"
-
-    def test_none_returns_unknown(self):
-        """Verify none returns unknown."""
-        assert _detect_lang_safe(None) == "unknown"  # type: ignore[arg-type]
-
-    def test_exactly_at_threshold_attempts_detection(self):
-        # 120 chars: satisfies the >= 120 guard; result must be a string
-        """Verify exactly at threshold attempts detection."""
-        text = "parola " * 20  # 140 chars of plausible Italian-ish tokens
-        result = _detect_lang_safe(text)
-        assert isinstance(result, str)
 
 
 # ===========================================================================

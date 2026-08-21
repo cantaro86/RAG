@@ -15,6 +15,7 @@ from typing import Any, Literal, Protocol
 import yaml
 from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from tqdm import tqdm
 
 TRACE_SCHEMA_VERSION = 1
 SAMPLE_SCHEMA_VERSION = 1
@@ -494,20 +495,33 @@ def collect_dataset(
     reformulated_count = 0
     retrieval_attempt_count = 0
     try:
-        for question in questions:
-            outcome = collect_question(agent, question, question_validator=question_validator)
-            trace_relative_path = Path("traces") / f"{question.id}.json.gz"
-            write_gzip_json(run_dir / trace_relative_path, outcome.trace)
-            if outcome.sample is not None:
-                outcome.sample["trace_path"] = trace_relative_path.as_posix()
-                append_jsonl(samples_path, outcome.sample)
-                sample_count += 1
-            if outcome.trace["status"] == "completed":
-                completed_count += 1
-                diagnostics = outcome.trace["diagnostics"]
-                retrieval_succeeded_count += diagnostics["retrieval_succeeded"]
-                reformulated_count += diagnostics["reformulation_count"] > 0
-                retrieval_attempt_count += len(diagnostics["retrieval_attempts"])
+        with tqdm(total=len(questions), desc="Collecting questions", unit="question") as progress:
+            for question_number, question in enumerate(questions, 1):
+                progress.set_postfix(
+                    question=question.id,
+                    samples=sample_count,
+                    failed=question_number - 1 - completed_count,
+                )
+                outcome = collect_question(agent, question, question_validator=question_validator)
+                trace_relative_path = Path("traces") / f"{question.id}.json.gz"
+                write_gzip_json(run_dir / trace_relative_path, outcome.trace)
+                if outcome.sample is not None:
+                    outcome.sample["trace_path"] = trace_relative_path.as_posix()
+                    append_jsonl(samples_path, outcome.sample)
+                    sample_count += 1
+                if outcome.trace["status"] == "completed":
+                    completed_count += 1
+                    diagnostics = outcome.trace["diagnostics"]
+                    retrieval_succeeded_count += diagnostics["retrieval_succeeded"]
+                    reformulated_count += diagnostics["reformulation_count"] > 0
+                    retrieval_attempt_count += len(diagnostics["retrieval_attempts"])
+                progress.update()
+                progress.set_postfix(
+                    question=question.id,
+                    samples=sample_count,
+                    failed=question_number - completed_count,
+                    refresh=False,
+                )
     except Exception as error:
         manifest.update(
             {
