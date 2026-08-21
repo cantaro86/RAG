@@ -4,6 +4,7 @@ import re
 import tempfile
 import threading
 import urllib.request
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -125,29 +126,33 @@ class DetectLanguage:
 
     MED_PREFIX = "[medical context] "
 
-    ITALIAN_WORDS = {
-        "ciao",
-        "salve",
-        "arrivederci",
-        "grazie",
-        "addio",
-        "il",
-        "la",
-        "lo",
-        "gli",
-        "le",
-        "di",
-        "dove",
-        "da",
-        "quando",
-        "che",
-        "non",
-        "per",
-        "come",
-        "stai",
-    }
-    ITALIAN_STRONG_WORDS = {"addio", "arrivederci", "ciao", "grazie"}
-    ITALIAN_SHORT_PHRASES = {("fa", "male")}
+    ITALIAN_WORDS = frozenset(
+        {
+            "ciao",
+            "salve",
+            "arrivederci",
+            "grazie",
+            "addio",
+            "il",
+            "la",
+            "lo",
+            "gli",
+            "le",
+            "di",
+            "dove",
+            "da",
+            "quando",
+            "che",
+            "non",
+            "per",
+            "come",
+            "stai",
+        }
+    )
+    ITALIAN_STRONG_WORDS = frozenset({"addio", "arrivederci", "ciao", "grazie"})
+    ITALIAN_SHORT_PHRASES = frozenset({("fa", "male")})
+    ENGLISH_GREETING_WORDS = frozenset({"hello", "hi"})
+    ENGLISH_PHRASES = frozenset({("i", "am")})
 
     def __init__(self, text: str, *, online: bool | None = None):
         self.text = text.strip()
@@ -161,6 +166,9 @@ class DetectLanguage:
 
     def _detect_language(self, text: str) -> str:
         """Automatically choose the best available detection method."""
+        foreign_lang = self._foreign_heuristic(text)
+        if foreign_lang:
+            return foreign_lang
         try:
             model = get_fasttext_model(online=self.online)
         except Exception:
@@ -171,12 +179,20 @@ class DetectLanguage:
         fallback_lang = self._robust_detect(text)
         return fallback_lang if fallback_lang == "it" else fasttext_lang
 
+    def _foreign_heuristic(self, text: str) -> str | None:
+        words = tuple(_WORD_RE.findall(text.casefold()))
+        if words and words[0] in self.ENGLISH_GREETING_WORDS:
+            return "en"
+        if any(phrase in self.ENGLISH_PHRASES for phrase in pairwise(words)):
+            return "en"
+        return None
+
     def _italian_heuristic(self, text: str) -> bool:
         normalized = text.casefold()
         words = tuple(_WORD_RE.findall(normalized))
         return (
             words in self.ITALIAN_SHORT_PHRASES
-            or bool(set(words) & self.ITALIAN_STRONG_WORDS)
+            or any(word in self.ITALIAN_STRONG_WORDS for word in words)
             or (len(words) == 1 and words[0] in self.ITALIAN_WORDS)
             or any(character in normalized for character in "èéòàìù")
         )
@@ -219,6 +235,9 @@ class DetectLanguage:
         """Use langdetect and token-based rules when FastText is unavailable."""
         logger.debug("Robust detection")
 
+        foreign_lang = self._foreign_heuristic(text)
+        if foreign_lang:
+            return foreign_lang
         if len(text.split()) <= 2:
             heuristic_lang = self._detect_simple_heuristic(text)
             if heuristic_lang:

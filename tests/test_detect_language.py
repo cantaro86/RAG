@@ -108,6 +108,23 @@ def test_short_non_italian_questions_remain_rejected_without_fasttext(monkeypatc
         language.DetectLanguage(question, online=False)
 
 
+def test_short_english_introduction_overrides_fasttext_italian_false_positive(monkeypatch):
+    """Reject an English introduction that FastText previously labeled Italian above threshold."""
+    model = FastTextPrediction("it", 0.24926041)
+    monkeypatch.setattr(language, "get_fasttext_model", lambda *, online: model)
+
+    with pytest.raises(ValueError, match="Only italian is supported"):
+        language.DetectLanguage("Hi, I am Nicola", online=False)
+
+
+@pytest.mark.parametrize("text", ["Mi chiamo Nicola", "Ciao, sono Nicola"])
+def test_italian_introductions_are_not_rejected_as_english(monkeypatch, text):
+    """Keep Italian introductions valid while rejecting the English regression phrase."""
+    monkeypatch.setattr(language, "get_fasttext_model", lambda *, online: FastTextPrediction("it", 0.9))
+
+    assert language.DetectLanguage(text, online=False).lang == "it"
+
+
 @pytest.mark.parametrize(
     ("fasttext_lang", "fallback_lang", "expected", "fallback_calls"),
     [
