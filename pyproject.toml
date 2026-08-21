@@ -53,6 +53,9 @@ dev = [
 markdown = [
     "docling",
 ]
+evaluation = [
+    "ragas @ git+https://github.com/sanyaden/ragas.git@96285f250a306504201f036022862f335837b372",
+]
 
 [dependency-groups]
 dev = [
@@ -118,6 +121,7 @@ addopts = "-v --tb=short"
 markers = [
     "cpu: tests that run on CPU only",
     "gpu: tests that require GPU",
+    "evaluation: repository-only evaluation tooling tests excluded from CI",
 ]
 
 

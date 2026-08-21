@@ -10,7 +10,7 @@
 - Match CI setup with `uv sync --locked --extra dev`.
 - PDF/DOCX conversion is optional; install it with `uv sync --locked --extra dev --extra markdown` before using `scripts/build_markdown.py`.
 - Run from the repository root with `uv run agentic_rag`. Do not run `python src/agentic_rag/cli.py`; the uninstalled fallback is `PYTHONPATH=src python -m agentic_rag`.
-- Run the CI test selection with `uv run pytest -m cpu`. Focus with `uv run pytest -m cpu tests/test_guardrail.py` or append a node such as `::test_graph_routing_on_topic`.
+- Run the CI test selection with `uv run pytest -m cpu`. Evaluation tooling tests run separately with `uv run --extra evaluation pytest -m evaluation tests/test_evaluation.py`. Focus package tests with `uv run pytest -m cpu tests/test_guardrail.py` or append a node such as `::test_graph_routing_on_topic`.
 - Run all configured checks with `uvx pre-commit run --all-files`. This can rewrite files because Ruff lint runs with `--fix` and Ruff format also runs.
 - Verify packaging in order with `uv build`, then `uvx twine check --strict dist/*`.
 

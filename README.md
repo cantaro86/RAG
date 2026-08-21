@@ -70,6 +70,17 @@ uv run coverage report
 Coverage is configured in `pyproject.toml` for `src/agentic_rag` and must remain at or above 85%.
 
 
+### RAGAS evaluation
+
+Evaluation questions, the independent judge configuration, Slurm instructions, and artifact documentation are in [`evaluation/README.md`](evaluation/README.md). Input validation is safe on a login node and does not load any model:
+
+```bash
+uv run python -m evaluation validate
+```
+
+Run collection and scoring only after allocating a GPU node, or submit `ragas_evaluation.sbatch`.
+
+
 ### Run the program
 Cluster allocation:
 ```bash

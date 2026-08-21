@@ -600,7 +600,7 @@ rfc3986-validator==0.1.1 ; (platform_machine == 'arm64' and sys_platform == 'dar
     #   jupyter-events
 rfc3987-syntax==1.1.0 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via jsonschema
-rich==15.0.0 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
+rich==14.3.4 ; (platform_machine == 'arm64' and sys_platform == 'darwin') or (platform_machine == 'x86_64' and sys_platform == 'linux')
     # via
     #   agentic-rag
     #   typer

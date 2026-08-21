@@ -41,3 +41,5 @@ basic_app.py
 demo_rag.py
 demo_rag2.py
 demo_rag3.py
+
+evaluation/results/
