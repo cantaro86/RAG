@@ -269,8 +269,7 @@ def build_result_rows(run_dir: Path) -> list[dict[str, Any]]:
         ),
     )
     return [
-        _result_row(trace, samples.get(question_id), scores.get(question_id))
-        for question_id, trace in ordered_traces
+        _result_row(trace, samples.get(question_id), scores.get(question_id)) for question_id, trace in ordered_traces
     ]
 
 
