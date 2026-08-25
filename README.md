@@ -175,7 +175,11 @@ spack spec py-agentic-rag +cuda cuda_arch=90
 
 
 
-#### Debugging
+### Debugging
+
+`debugpy` is included in the development dependencies. The following command starts the application under the debugger and waits for a client before running any application code.
+
+With a Conda environment where the project and `debugpy` are installed directly, request the allocation and run:
 
 ```bash
 module load conda
@@ -184,13 +188,87 @@ conda activate RAG
 python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m agentic_rag
 ```
 
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+No `uv` command is needed in that case. However, the current `environment.yml` installs only Python and `uv`; it does not install the project into the Conda environment. If `RAG` was created from that file, follow the `uv` workflow below after activating it.
 
-In another terminal
+With `uv`, first ensure that the development dependencies are installed, then request the allocation and use `uv run`:
+
+```bash
+module load python3.14
+module load uv
+uv sync --locked --extra dev
+salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=4 --gpus-per-node=1 --time=08:45:00 --nodelist=dgx01 --qos=mira
+uv run python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m agentic_rag
+
+# Debug evaluation collection (GPU node)
+uv run python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m evaluation collect --limit 1
+
+# Debug evaluation scoring (GPU node; requires the evaluation extra)
+uv run --extra evaluation python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m evaluation score evaluation/results/<run-id> --limit 1
+```
+
+The other evaluation commands use the same pattern: replace `collect --limit 1` with `validate` or `export-excel` and its required arguments. Run only one debugger command at a time because they all listen on port `5643`.
+
+If needed, set the CUDA allocator option before starting the application:
+
+```bash
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+```
+
+In another terminal, forward the debugger port from the allocated node. Keep this connection open while debugging:
 
 ```bash
 ssh -N -L 5643:dgx01:5643 dgx01
 ```
+
+Then attach the IDE to `localhost:5643`. For example, a VS Code `launch.json` entry is:
+
+```json
+{
+  "name": "Attach to agentic_rag",
+  "type": "debugpy",
+  "request": "attach",
+  "connect": {
+    "host": "localhost",
+    "port": 5643
+  },
+  "justMyCode": false
+}
+```
+
+#### Attaching at a specific point
+
+`attach_debugger_if_requested()` from `src/agentic_rag/_load_env.py` can be called from any application, evaluation, or script code where debugger attachment should become available. Gradio currently calls it after building the RAG agent, but the function itself is not limited to Gradio.
+
+Import and call it at the desired execution point:
+
+```python
+from agentic_rag._load_env import attach_debugger_if_requested
+
+# Code that should run before debugger attachment can go here.
+attach_debugger_if_requested()
+```
+
+Enable the call through `config.yaml`:
+
+```yaml
+debugger: true
+```
+
+Alternatively, enable it for one process without editing the configuration:
+
+```bash
+DEBUG_MODE=1 uv run agentic_rag
+```
+
+Setting `DEBUG_MODE` only has an effect if the selected code path calls `attach_debugger_if_requested()`. For example, the existing call is on the Gradio path, which can be selected for one run with:
+
+```bash
+DEBUG_MODE=1 AGENTIC_RAG_MODE=gradio uv run agentic_rag
+```
+
+When reached, the function listens on `0.0.0.0:5643` and pauses at an `input()` prompt. Create the SSH tunnel shown above, attach the IDE to `localhost:5643`, and then press Enter in the application terminal. Place the call before model construction to debug startup, or after model construction to avoid waiting for models while attached.
+
+Call the function at most once in a process because a second call cannot listen on the same port. It also requires an interactive terminal for the Enter prompt, so the direct `python -m debugpy ... --wait-for-client` approach is more suitable for unattended batch jobs.
 
 
 ![AI AGENT](graph.png)
