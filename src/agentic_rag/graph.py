@@ -205,14 +205,14 @@ def retrieve_and_filter(state, retriever, threshold: float, rerank: bool):
         source_filter = extract_source_filter(question)
     logger.debug(f"Source filter: {source_filter}")
 
-    docs_en = retriever.invoke(question, filter=source_filter)
+    docs = retriever.invoke(question, filter=source_filter)
 
     if rerank:
         relevant_docs = [
-            d for d in docs_en if "rerank_score" in d.metadata and float(d.metadata["rerank_score"]) > threshold
+            d for d in docs if "rerank_score" in d.metadata and float(d.metadata["rerank_score"]) > threshold
         ]
     else:
-        relevant_docs = list(docs_en)
+        relevant_docs = list(docs)
 
     # score_prob = []
     # Debug info
@@ -224,7 +224,7 @@ def retrieve_and_filter(state, retriever, threshold: float, rerank: bool):
         #         [round(_rerank_score, 2), float(round(expit(_rerank_score), 2))]
         #     )
         sources_table = print_sources(relevant_docs)
-        logger.debug(f"Retrieved {len(docs_en)} docs, {len(relevant_docs)} accepted (threshold={threshold})")
+        logger.debug(f"Retrieved {len(docs)} docs, {len(relevant_docs)} accepted (threshold={threshold})")
         # logger.debug(f"Scores and probabilities of all retrieved docs: {score_prob}")
         logger.debug(f"Top sources:\n{sources_table}")
 
