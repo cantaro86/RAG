@@ -136,12 +136,18 @@ def _question_from_state(state: Mapping[str, Any]) -> str | None:
 
 def _classification(trace: Mapping[str, Any], diagnostics: Mapping[str, Any]) -> str | None:
     raw = diagnostics.get("guardrail_status")
+    social = diagnostics.get("social_intent")
+    if (not isinstance(raw, str) or not raw) and social in {"SALUTO", "GRAZIE"}:
+        raw = social
     if not isinstance(raw, str) or not raw:
         for step in reversed(_list(trace.get("steps"))):
             if not isinstance(step, Mapping):
                 continue
             state = _mapping(step.get("state"))
             candidate = state.get("guardrail_status")
+            if not isinstance(candidate, str) or not candidate:
+                social = state.get("social_intent")
+                candidate = social if social in {"SALUTO", "GRAZIE"} else None
             if isinstance(candidate, str) and candidate:
                 raw = candidate
                 break

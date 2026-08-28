@@ -20,7 +20,8 @@ def _build_graph_for_rendering(cfg):
         cleaner_chain=dependency,
         pre_retrieval_question_rewriter=dependency,
         question_transformer=dependency,
-        guardrail_chain=dependency,
+        social_intent_chain=dependency,
+        domain_guardrail_chain=dependency,
         synonyms=dependency,
     )
     return build_agent_graph(context, cfg).get_graph()

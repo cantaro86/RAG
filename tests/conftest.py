@@ -186,7 +186,10 @@ def mock_ctx():
     ctx = MagicMock(spec=RAGContext)
 
     # Mock all chains to return basic mock values
-    ctx.guardrail_chain = MagicMock()
+    ctx.social_intent_chain = MagicMock()
+    ctx.social_intent_chain.invoke.return_value = "DOMANDA"
+    ctx.domain_guardrail_chain = MagicMock()
+    ctx.domain_guardrail_chain.invoke.return_value = "ON_TOPIC"
     ctx.sanitizer_chain = MagicMock()
     ctx.sanitizer_chain.invoke.return_value = "Sanitized query"
     ctx.topic_continuity_classifier = MagicMock()
@@ -213,3 +216,37 @@ def mock_ctx():
     ctx.synonyms.find_matched_terms.return_value = []
 
     return ctx
+
+
+@pytest.fixture(scope="session")
+def gpu_guardrail_llm(config_data):
+    """Load the configured LLM once on CUDA or Apple MPS."""
+    import torch
+
+    cuda_available = torch.cuda.is_available()
+    mps_available = torch.backends.mps.is_available()
+    if not cuda_available and not mps_available:
+        pytest.skip("Guardrail prompt tests require a CUDA or Apple MPS accelerator")
+
+    from agentic_rag._load_env import hf_hub_cache_for
+    from agentic_rag.llm_build import build_llm_pipe
+
+    llm = build_llm_pipe(
+        config_data.llm_model,
+        256,
+        config_data.temperature,
+        config_data.top_p,
+        config_data.top_k,
+        config_data.repetition_penalty,
+        config_data.no_repeat_ngram_size,
+        quantization=config_data.quantization,
+        online=config_data.online,
+        debugger=config_data.debugger,
+        cache_folder=hf_hub_cache_for(config_data.hf_home),
+    )
+    yield llm
+    del llm
+    if cuda_available:
+        torch.cuda.empty_cache()
+    else:
+        torch.mps.empty_cache()

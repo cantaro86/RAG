@@ -17,7 +17,7 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from tqdm import tqdm
 
-TRACE_SCHEMA_VERSION = 1
+TRACE_SCHEMA_VERSION = 2
 SAMPLE_SCHEMA_VERSION = 1
 
 MetricName = Literal["faithfulness", "context_utilization", "answer_relevancy"]
@@ -294,6 +294,7 @@ def derive_trace_diagnostics(raw_question: str, steps: list[dict[str, Any]]) -> 
         "terminal_node": node_path[-1] if node_path else None,
         "next_nodes": steps[-1]["next_nodes"] if steps else [],
         "failed_nodes": failed_nodes,
+        "social_intent": final_state.get("social_intent"),
         "guardrail_status": final_state.get("guardrail_status"),
         "retrieval_succeeded": any(attempt["has_docs"] is True for attempt in retrieval_attempts),
         "final_has_docs": final_state.get("has_docs"),

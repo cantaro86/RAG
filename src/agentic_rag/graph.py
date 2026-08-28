@@ -24,7 +24,8 @@ class RAGContext:
     cleaner_chain: object
     pre_retrieval_question_rewriter: object
     question_transformer: object
-    guardrail_chain: object
+    social_intent_chain: object
+    domain_guardrail_chain: object
     synonyms: SynonymStore
 
     def __post_init__(self):
@@ -94,23 +95,41 @@ def sanitize_question(state: GraphState, sanitizer_chain):
         "generation": None,
         "topic_status": None,
         "has_docs": False,
+        "social_intent": None,
         "guardrail_status": None,
         "source_filter": source_filter,
         "history": state.get("history", []),
     }
 
 
-def guardrail(state: GraphState, guardrail_chain):
-    logger.debug("--- GUARDRAIL ---")
+def social_intent(state: GraphState, social_intent_chain):
+    logger.debug("--- SOCIAL INTENT ---")
     question = state["question"]
 
-    # Run the guardrail classifier
-    classification = guardrail_chain.invoke({"question": question})
+    classification = social_intent_chain.invoke({"question": question})
     classification = str(classification).strip().upper()
-    logger.debug(f"Guardrail classification: {classification}")
+    logger.debug(f"Social intent classification: {classification}")
 
-    if classification not in ("SALUTO", "GRAZIE", "OFF_TOPIC", "ON_TOPIC"):
-        logger.warning(f"Unexpected guardrail classification '{classification}', defaulting to ON_TOPIC")
+    if classification not in ("SALUTO", "GRAZIE", "DOMANDA"):
+        logger.warning(f"Unexpected social intent classification '{classification}', defaulting to DOMANDA")
+        classification = "DOMANDA"
+
+    return {
+        **state,
+        "social_intent": classification,
+    }
+
+
+def domain_guardrail(state: GraphState, domain_guardrail_chain):
+    logger.debug("--- DOMAIN GUARDRAIL ---")
+    question = state["question"]
+
+    classification = domain_guardrail_chain.invoke({"question": question})
+    classification = str(classification).strip().upper()
+    logger.debug(f"Domain guardrail classification: {classification}")
+
+    if classification not in ("OFF_TOPIC", "ON_TOPIC"):
+        logger.warning(f"Unexpected domain classification '{classification}', defaulting to ON_TOPIC")
         classification = "ON_TOPIC"
 
     return {
@@ -416,16 +435,21 @@ def route_on_topic(state: GraphState) -> str:
     return "same"
 
 
-def route_guardrail(state: GraphState) -> str:
-    status = state.get("guardrail_status", "ON_TOPIC")
+def route_social_intent(state: GraphState) -> str:
+    status = state.get("social_intent", "DOMANDA")
     if status == "SALUTO":
         return "hello"
-    elif status == "GRAZIE":
+    if status == "GRAZIE":
         return "thanks"
-    elif status == "OFF_TOPIC":
+    return "content"
+
+
+def route_domain_guardrail(state: GraphState) -> str:
+    if state.get("guardrail_status", "ON_TOPIC") == "OFF_TOPIC":
         return "off_topic"
-    else:
-        return "on_topic"
+    if str(state.get("topic_status", "")).strip().upper() in ("NEW", "NEW_TOPIC", "NUOVO"):
+        return "new_topic"
+    return "on_topic"
 
 
 # ------------------------
@@ -440,7 +464,12 @@ def build_agent_graph(ctx: RAGContext, cfg: Config):
 
     workflow.add_node("sanitize_question", partial(sanitize_question, sanitizer_chain=ctx.sanitizer_chain))
 
-    workflow.add_node("guardrail", partial(guardrail, guardrail_chain=ctx.guardrail_chain))
+    workflow.add_node("social_intent", partial(social_intent, social_intent_chain=ctx.social_intent_chain))
+
+    workflow.add_node(
+        "domain_guardrail",
+        partial(domain_guardrail, domain_guardrail_chain=ctx.domain_guardrail_chain),
+    )
 
     workflow.add_node("handle_hello", handle_hello)
 
@@ -507,16 +536,15 @@ def build_agent_graph(ctx: RAGContext, cfg: Config):
 
     workflow.add_edge(START, "sanitize_question")
 
-    workflow.add_edge("sanitize_question", "guardrail")
+    workflow.add_edge("sanitize_question", "social_intent")
 
     workflow.add_conditional_edges(
-        "guardrail",
-        route_guardrail,
+        "social_intent",
+        route_social_intent,
         {
             "hello": "handle_hello",
             "thanks": "handle_thanks",
-            "off_topic": "handle_off_topic",
-            "on_topic": "init_first_question",
+            "content": "init_first_question",
         },
     )
 
@@ -530,7 +558,7 @@ def build_agent_graph(ctx: RAGContext, cfg: Config):
         "init_first_question",
         route_first_question,
         {
-            "first": "retrieve_and_filter",
+            "first": "domain_guardrail",
             "followup": "topic_detector",
         },
     )
@@ -540,13 +568,23 @@ def build_agent_graph(ctx: RAGContext, cfg: Config):
         route_on_topic,
         {
             "same": "pre_retrieval_rewriter",
-            "new": "clear_history",
+            "new": "domain_guardrail",
+        },
+    )
+
+    workflow.add_edge("pre_retrieval_rewriter", "domain_guardrail")
+
+    workflow.add_conditional_edges(
+        "domain_guardrail",
+        route_domain_guardrail,
+        {
+            "off_topic": "handle_off_topic",
+            "new_topic": "clear_history",
+            "on_topic": "retrieve_and_filter",
         },
     )
 
     workflow.add_edge("clear_history", "retrieve_and_filter")
-
-    workflow.add_edge("pre_retrieval_rewriter", "retrieve_and_filter")
 
     workflow.add_conditional_edges(
         "retrieve_and_filter",

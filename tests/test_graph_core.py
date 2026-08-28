@@ -7,14 +7,15 @@ from langchain_core.documents import Document
 from agentic_rag.graph import (
     RAGContext,
     clean_answer,
+    domain_guardrail,
     format_history,
     generate_with_docs,
-    guardrail,
     pre_retrieval_rewriter,
     push_memory,
     retrieve_and_filter,
     route_on_topic,
     sanitize_question,
+    social_intent,
     transform_query,
 )
 from agentic_rag.state import GraphState
@@ -62,6 +63,7 @@ def test_sanitize_captures_filter_and_resets_transient_state_without_losing_hist
     assert result["first_question"] is False
     assert result["has_docs"] is False
     assert result["topic_status"] is None
+    assert result["social_intent"] is None
     assert result["guardrail_status"] is None
 
 
@@ -221,7 +223,8 @@ def test_rag_context_rejects_missing_dependencies():
         "cleaner_chain": MagicMock(),
         "pre_retrieval_question_rewriter": MagicMock(),
         "question_transformer": MagicMock(),
-        "guardrail_chain": MagicMock(),
+        "social_intent_chain": MagicMock(),
+        "domain_guardrail_chain": MagicMock(),
         "synonyms": MagicMock(),
     }
 
@@ -229,14 +232,24 @@ def test_rag_context_rejects_missing_dependencies():
         RAGContext(**dependencies)
 
 
-def test_guardrail_defaults_unexpected_classifier_output_to_on_topic():
-    """Verify malformed guardrail classifications follow the safe on-topic route."""
+def test_domain_guardrail_defaults_unexpected_classifier_output_to_on_topic():
+    """Verify malformed domain classifications follow the safe on-topic route."""
     chain = MagicMock()
     chain.invoke.return_value = "unexpected"
 
-    result = guardrail({"question": "domanda"}, chain)
+    result = domain_guardrail({"question": "domanda"}, chain)
 
     assert result["guardrail_status"] == "ON_TOPIC"
+
+
+def test_social_intent_defaults_unexpected_classifier_output_to_content():
+    """Verify malformed social classifications continue to domain validation."""
+    chain = MagicMock()
+    chain.invoke.return_value = "unexpected"
+
+    result = social_intent({"question": "domanda"}, chain)
+
+    assert result["social_intent"] == "DOMANDA"
 
 
 @pytest.mark.parametrize(

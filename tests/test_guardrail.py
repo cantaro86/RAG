@@ -10,7 +10,7 @@ pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
 
 def test_graph_routing_thanks(mock_ctx, config_data):
     """Verify graph routing thanks."""
-    mock_ctx.guardrail_chain.invoke.return_value = "GRAZIE"
+    mock_ctx.social_intent_chain.invoke.return_value = "GRAZIE"
 
     question = "Grazie per le informazioni!"
 
@@ -20,7 +20,8 @@ def test_graph_routing_thanks(mock_ctx, config_data):
 
     result = agent.invoke(state, config=config)
 
-    assert result["guardrail_status"] == "GRAZIE"
+    assert result["social_intent"] == "GRAZIE"
+    assert result["guardrail_status"] is None
     assert "generation" in result
     assert "Di nulla, sono qui per aiutarti." in result["generation"]
 
@@ -28,11 +29,12 @@ def test_graph_routing_thanks(mock_ctx, config_data):
     mock_ctx.sanitizer_chain.invoke.assert_called_with(state)
     mock_ctx.rag_chain.invoke.assert_not_called()
     mock_ctx.retriever.invoke.assert_not_called()
+    mock_ctx.domain_guardrail_chain.invoke.assert_not_called()
 
 
 def test_graph_routing_hello(mock_ctx, config_data):
     """Verify graph routing hello."""
-    mock_ctx.guardrail_chain.invoke.return_value = "SALUTO"
+    mock_ctx.social_intent_chain.invoke.return_value = "SALUTO"
 
     question = "Ciao, vorrei fare una domanda"
 
@@ -42,7 +44,8 @@ def test_graph_routing_hello(mock_ctx, config_data):
 
     result = agent.invoke(state, config=config)
 
-    assert result["guardrail_status"] == "SALUTO"
+    assert result["social_intent"] == "SALUTO"
+    assert result["guardrail_status"] is None
     assert "generation" in result
     assert "Ciao, sono un agente IA." in result["generation"]
 
@@ -50,11 +53,12 @@ def test_graph_routing_hello(mock_ctx, config_data):
     mock_ctx.sanitizer_chain.invoke.assert_called_with(state)
     mock_ctx.rag_chain.invoke.assert_not_called()
     mock_ctx.retriever.invoke.assert_not_called()
+    mock_ctx.domain_guardrail_chain.invoke.assert_not_called()
 
 
 def test_graph_routing_off_topic(mock_ctx, config_data):
     """Verify graph routing off topic."""
-    mock_ctx.guardrail_chain.invoke.return_value = "OFF_TOPIC"
+    mock_ctx.domain_guardrail_chain.invoke.return_value = "OFF_TOPIC"
 
     question = "Come si prepara la carbonara?"
 
@@ -65,6 +69,7 @@ def test_graph_routing_off_topic(mock_ctx, config_data):
     result = agent.invoke(state, config=config)
 
     assert result["guardrail_status"] == "OFF_TOPIC"
+    assert result["social_intent"] == "DOMANDA"
     assert "generation" in result
     assert "Spiacente, non posso aiutarti." in result["generation"]
 
@@ -76,8 +81,6 @@ def test_graph_routing_off_topic(mock_ctx, config_data):
 
 def test_graph_routing_on_topic(mock_ctx, config_data):
     """Verify graph routing on topic."""
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
-
     question = "Qual è la preparazione per la Colon-TC?"
 
     agent = build_agent_graph(mock_ctx, config_data)
@@ -87,6 +90,7 @@ def test_graph_routing_on_topic(mock_ctx, config_data):
     result = agent.invoke(state, config=config)
 
     assert result["guardrail_status"] == "ON_TOPIC"
+    assert result["social_intent"] == "DOMANDA"
     # It should have run sanitize_question, retriever, and generate_with_docs
     mock_ctx.sanitizer_chain.invoke.assert_called_once()
     mock_ctx.sanitizer_chain.invoke.assert_called_with(state)
@@ -99,16 +103,16 @@ def test_guardrail_branch_resets_transient_state_and_preserves_history(mock_ctx,
     """Verify guardrail branch resets transient state and preserves history."""
     agent = build_agent_graph(mock_ctx, config_data)
     config = {"configurable": {"thread_id": "test-reset-thread"}}
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
+    mock_ctx.social_intent_chain.invoke.side_effect = ["DOMANDA", "SALUTO"]
 
     first = agent.invoke({"question": "Come mi preparo?"}, config=config)
     first_history = first["history"]
     assert first_history
 
-    mock_ctx.guardrail_chain.invoke.return_value = "SALUTO"
     second = agent.invoke({"question": "Ciao"}, config=config)
 
-    assert second["guardrail_status"] == "SALUTO"
+    assert second["social_intent"] == "SALUTO"
+    assert second["guardrail_status"] is None
     assert second["documents"] == []
     assert second["rewrite_count"] == 0
     assert second["has_docs"] is False
@@ -125,7 +129,6 @@ def test_graph_uses_passed_rerank_cleaning_and_memory_config(mock_ctx, config_da
             "max_history_turns": 0,
         }
     )
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
     mock_ctx.retriever.invoke.return_value = [Document(page_content="contenuto", metadata={})]
     mock_ctx.rag_chain.invoke.return_value = "Risposta grezza (Doc 2)"
     mock_ctx.cleaner_chain.invoke.return_value = "Risposta pulita"
@@ -144,7 +147,6 @@ def test_graph_uses_passed_rerank_cleaning_and_memory_config(mock_ctx, config_da
 def test_graph_uses_passed_rerank_threshold(mock_ctx, config_data):
     """Verify graph uses passed rerank threshold."""
     cfg = config_data.model_copy(update={"threshold": 0.95, "rerank": True})
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
     agent = build_agent_graph(mock_ctx, cfg)
 
     result = agent.invoke(
@@ -159,7 +161,6 @@ def test_graph_uses_passed_rerank_threshold(mock_ctx, config_data):
 
 def test_compiled_graph_rewrites_same_topic_followup_with_checkpoint_history(mock_ctx, config_data):
     """Verify same-topic follow-ups are rewritten using checkpointed conversation history."""
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
     mock_ctx.sanitizer_chain.invoke.side_effect = ["prima sanitizzata", "seconda sanitizzata"]
     mock_ctx.topic_continuity_classifier.invoke.return_value = "STESSO"
     mock_ctx.pre_retrieval_question_rewriter.invoke.return_value = "seconda autonoma"
@@ -178,6 +179,10 @@ def test_compiled_graph_rewrites_same_topic_followup_with_checkpoint_history(moc
     mock_ctx.pre_retrieval_question_rewriter.invoke.assert_called_once_with(
         {"question": "seconda sanitizzata", "history": expected_history}
     )
+    assert mock_ctx.domain_guardrail_chain.invoke.call_args_list == [
+        call({"question": "prima sanitizzata"}),
+        call({"question": "seconda autonoma"}),
+    ]
     assert mock_ctx.retriever.invoke.call_args_list == [
         call("prima sanitizzata", filter=None),
         call("seconda autonoma", filter=None),
@@ -192,7 +197,6 @@ def test_compiled_graph_rewrites_same_topic_followup_with_checkpoint_history(moc
 
 def test_compiled_graph_clears_history_for_new_topic_followup(mock_ctx, config_data):
     """Verify new-topic follow-ups bypass rewriting and replace prior conversation history."""
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
     mock_ctx.sanitizer_chain.invoke.side_effect = ["prima sanitizzata", "seconda sanitizzata"]
     mock_ctx.topic_continuity_classifier.invoke.return_value = "NUOVO"
     mock_ctx.rag_chain.invoke.side_effect = ["risposta uno", "risposta due"]
@@ -205,6 +209,10 @@ def test_compiled_graph_clears_history_for_new_topic_followup(mock_ctx, config_d
     assert result["topic_status"] == "NUOVO"
     assert result["first_question"] is True
     mock_ctx.pre_retrieval_question_rewriter.invoke.assert_not_called()
+    assert mock_ctx.domain_guardrail_chain.invoke.call_args_list == [
+        call({"question": "prima sanitizzata"}),
+        call({"question": "seconda sanitizzata"}),
+    ]
     assert mock_ctx.retriever.invoke.call_args_list == [
         call("prima sanitizzata", filter=None),
         call("seconda sanitizzata", filter=None),
@@ -215,13 +223,32 @@ def test_compiled_graph_clears_history_for_new_topic_followup(mock_ctx, config_d
     ]
 
 
+def test_new_off_topic_followup_is_rejected_without_clearing_valid_history(mock_ctx, config_data):
+    """Domain-check a new follow-up before clearing the prior on-topic conversation."""
+    mock_ctx.sanitizer_chain.invoke.side_effect = ["prima sanitizzata", "domanda estranea"]
+    mock_ctx.topic_continuity_classifier.invoke.return_value = "NUOVO"
+    mock_ctx.domain_guardrail_chain.invoke.side_effect = ["ON_TOPIC", "OFF_TOPIC"]
+    mock_ctx.rag_chain.invoke.return_value = "risposta uno"
+    agent = build_agent_graph(mock_ctx, config_data)
+    config = {"configurable": {"thread_id": "off-topic-followup-thread"}}
+
+    first = agent.invoke({"question": "prima"}, config=config)
+    result = agent.invoke({"question": "domanda estranea"}, config=config)
+
+    assert result["guardrail_status"] == "OFF_TOPIC"
+    assert result["history"] == first["history"]
+    assert mock_ctx.retriever.invoke.call_args_list == [call("prima sanitizzata", filter=None)]
+    mock_ctx.pre_retrieval_question_rewriter.invoke.assert_not_called()
+
+
 def test_compiled_graph_exposes_all_runtime_nodes(mock_ctx, config_data):
     """Verify the runtime graph contains every expected application node."""
     graph = build_agent_graph(mock_ctx, config_data).get_graph()
 
     assert {
         "sanitize_question",
-        "guardrail",
+        "social_intent",
+        "domain_guardrail",
         "handle_hello",
         "handle_thanks",
         "handle_off_topic",

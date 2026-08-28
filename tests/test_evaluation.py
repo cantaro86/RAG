@@ -338,14 +338,16 @@ def test_ragas_judge_implements_current_structured_interface():
 
 def test_collect_question_uses_real_graph_checkpoint_history(mock_ctx, config_data):
     document = Document(page_content="Contesto reale", metadata={"source": "source.md", "rerank_score": 0.9})
-    mock_ctx.guardrail_chain.invoke.return_value = "ON_TOPIC"
     mock_ctx.retriever.invoke.side_effect = [[], [document]]
     agent = build_agent_graph(mock_ctx, config_data)
     question = EvaluationQuestion(id="q0001-abcd1234", line_number=1, text="Domanda originale")
 
     outcome = collect_question(agent, question)
 
+    assert outcome.trace["schema_version"] == 2
     assert outcome.trace["status"] == "completed"
+    assert outcome.trace["diagnostics"]["social_intent"] == "DOMANDA"
+    assert outcome.trace["diagnostics"]["guardrail_status"] == "ON_TOPIC"
     assert [version["question"] for version in outcome.trace["diagnostics"]["question_versions"]] == [
         "Domanda originale",
         "Sanitized query",
@@ -353,8 +355,9 @@ def test_collect_question_uses_real_graph_checkpoint_history(mock_ctx, config_da
     ]
     assert outcome.trace["diagnostics"]["node_path"] == [
         "sanitize_question",
-        "guardrail",
+        "social_intent",
         "init_first_question",
+        "domain_guardrail",
         "retrieve_and_filter",
         "transform_query",
         "retrieve_and_filter",

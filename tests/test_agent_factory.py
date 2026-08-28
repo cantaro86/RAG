@@ -82,6 +82,7 @@ def test_build_rag_agent_forwards_passed_config(monkeypatch):
         (context.cleaner_chain, {"answer": "a"}),
         (context.pre_retrieval_question_rewriter, {"question": "q", "history": "h"}),
         (context.question_transformer, {"question": "q", "matched_terms": {}}),
-        (context.guardrail_chain, {"question": "q"}),
+        (context.social_intent_chain, {"question": "q"}),
+        (context.domain_guardrail_chain, {"question": "q"}),
     ]
     assert [chain.invoke(values) for chain, values in chain_inputs] == ["model output"] * len(chain_inputs)

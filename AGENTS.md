@@ -11,6 +11,8 @@
 - PDF/DOCX conversion is optional; install it with `uv sync --locked --extra dev --extra markdown` before using `scripts/build_markdown.py`.
 - Run from the repository root with `uv run agentic_rag`. Do not run `python src/agentic_rag/cli.py`; the uninstalled fallback is `PYTHONPATH=src python -m agentic_rag`.
 - Run the CI test selection with `uv run pytest -m cpu`. Evaluation tooling tests run separately with `uv run --extra evaluation pytest -m evaluation tests/test_evaluation.py`. Focus package tests with `uv run pytest -m cpu tests/test_guardrail.py` or append a node such as `::test_graph_routing_on_topic`.
+- GPU tests support CUDA on the DGX cluster and MPS on a local Apple Silicon Mac. On a Mac, run `uv run pytest -m gpu` directly. On the DGX cluster, first allocate an interactive node with `salloc --job-name="gpu-tests" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal`, then run `uv run pytest -m gpu`; do not list individual GPU test files.
+- For CPU coverage, run `uv run coverage erase`, `uv run coverage run -m pytest -m cpu`, then `uv run coverage report`. For combined coverage, run the CPU coverage command first, append GPU results with `uv run coverage run --append -m pytest -m gpu`, then run `uv run coverage report`; use a local Apple Silicon Mac directly or a DGX GPU allocation. Coverage is source-only, branch-enabled, and must remain at or above 85%.
 - Run all configured checks with `uvx pre-commit run --all-files`. This can rewrite files because Ruff lint runs with `--fix` and Ruff format also runs.
 - Verify packaging in order with `uv build`, then `uvx twine check --strict dist/*`.
 

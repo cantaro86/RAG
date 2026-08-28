@@ -28,4 +28,5 @@ class GraphState(TypedDict, total=False):
     source_filter: dict[str, str] | None
     topic_status: Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC", "STESSO", "NUOVO"] | None
     has_docs: bool
-    guardrail_status: Literal["SALUTO", "GRAZIE", "OFF_TOPIC", "ON_TOPIC"] | None
+    social_intent: Literal["SALUTO", "GRAZIE", "DOMANDA"] | None
+    guardrail_status: Literal["OFF_TOPIC", "ON_TOPIC"] | None

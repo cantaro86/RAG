@@ -60,10 +60,38 @@ To run a specific test file, append its path, for example:
 uv run pytest -m cpu tests/test_guardrail.py
 ```
 
-Run the tests with branch coverage and display the source-only report:
+The `gpu` marker selects every model-backed GPU test. On a local Apple Silicon Mac, MPS is selected automatically and no Slurm allocation is needed:
 
 ```bash
+uv run pytest -m gpu
+```
+
+On the DGX cluster, first allocate an interactive GPU node:
+
+```bash
+salloc --job-name="gpu-tests" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
+```
+
+Then run the same GPU suite inside the allocation:
+
+```bash
+uv run pytest -m gpu
+```
+
+Run the CPU tests with branch coverage and display the source-only report:
+
+```bash
+uv run coverage erase
 uv run coverage run -m pytest -m cpu
+uv run coverage report
+```
+
+To measure combined CPU and GPU coverage, run both selections into the same coverage data file. Run these commands directly on a local Apple Silicon Mac, or inside the GPU allocation on the DGX cluster:
+
+```bash
+uv run coverage erase
+uv run coverage run -m pytest -m cpu
+uv run coverage run --append -m pytest -m gpu
 uv run coverage report
 ```
 

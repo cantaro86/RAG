@@ -174,7 +174,8 @@ Read the diagnostic fields as follows:
 | `maximum_rewrite_count` | Highest retry counter observed in the graph state. |
 | `retrieval_succeeded` | Whether any retrieval attempt produced accepted documents. |
 | `final_has_docs` | Value of `has_docs` in the final available checkpoint. |
-| `guardrail_status` | Final recorded guardrail decision, when present. |
+| `social_intent` | Final social classification (`SALUTO`, `GRAZIE`, or `DOMANDA`), when present. |
+| `guardrail_status` | Final domain decision (`ON_TOPIC` or `OFF_TOPIC`), when present. |
 | `terminal_node` | Last node represented in the checkpoint history. |
 | `next_nodes` | Nodes still scheduled after the final available checkpoint; useful when diagnosing an incomplete run. |
 | `failed_nodes` | Node names whose serialized LangGraph tasks contain errors. |

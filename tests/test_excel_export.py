@@ -5,7 +5,7 @@ import pytest
 from openpyxl import load_workbook
 
 from evaluation.cli import main as evaluation_main
-from evaluation.export_excel import export_run_to_excel
+from evaluation.export_excel import _classification, export_run_to_excel
 from evaluation.tracing import write_gzip_json
 
 pytestmark = pytest.mark.evaluation
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.evaluation
 def _trace(question_id, line_number, question, *, completed=True):
     if not completed:
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "question_id": question_id,
             "question_line": line_number,
             "raw_question": question,
@@ -27,7 +27,7 @@ def _trace(question_id, line_number, question, *, completed=True):
                     "checkpoint_step": -1,
                     "nodes": ["__input__"],
                     "next_nodes": ["sanitize_question"],
-                    "state": {"question": question},
+                    "state": {"question": question, "social_intent": "DOMANDA"},
                     "tasks": [],
                 }
             ],
@@ -40,6 +40,7 @@ def _trace(question_id, line_number, question, *, completed=True):
                 "terminal_node": None,
                 "next_nodes": ["sanitize_question"],
                 "failed_nodes": [],
+                "social_intent": "DOMANDA",
                 "guardrail_status": None,
                 "retrieval_succeeded": False,
                 "final_has_docs": None,
@@ -219,6 +220,7 @@ def test_excel_export_combines_artifacts_and_keeps_failed_questions(tmp_path):
         assert completed["answer_relevancy"] == 0.9
         assert failed["question_line"] == 2
         assert failed["collection_status"] == "failed"
+        assert failed["classification"] is None
         assert failed["final_response"] is None
     finally:
         workbook.close()
@@ -254,3 +256,11 @@ def test_excel_export_supports_collected_run_without_scores_or_summary(tmp_path)
         assert completed["answer_relevancy"] is None
     finally:
         workbook.close()
+
+
+@pytest.mark.parametrize(("social_intent", "expected"), [("SALUTO", "greeting"), ("GRAZIE", "thanks")])
+def test_excel_classification_uses_terminal_social_intents(social_intent, expected):
+    diagnostics = {"guardrail_status": None, "social_intent": social_intent}
+
+    assert _classification({}, diagnostics) == expected
+    assert _classification({}, {**diagnostics, "social_intent": "DOMANDA"}) is None
