@@ -1,10 +1,18 @@
 import os
 import sys
 import traceback
+from pathlib import Path
 
 import agentic_rag._load_env as _  # noqa: F401  # isort: skip
 from agentic_rag.config_schema import Config
-from agentic_rag._load_env import cfg, console, ONLINE  # noqa: F401  # isort: skip
+from agentic_rag._load_env import (  # noqa: F401  # isort: skip
+    EFFECTIVE_HF_HOME,
+    HF_ONLINE,
+    NETWORK_AVAILABLE,
+    NETWORK_PROBE_SKIPPED,
+    cfg,
+    console,
+)
 from rich.markup import escape
 
 from agentic_rag.agent_factory import build_rag_agent
@@ -14,6 +22,7 @@ from agentic_rag.loggers import Logger
 from agentic_rag.ui_gradio import launch_gradio
 
 logger = Logger.get_logger(__name__)
+_INDEX_FILENAMES = ("index.faiss", "index.pkl")
 
 
 # ------------------------
@@ -23,20 +32,8 @@ def interactive_loop(cfg: Config):
     """Interactive loop with the agent"""
     agent = build_rag_agent(cfg)
 
-    #############################################################################
-    # from langchain_core.runnables.graph import MermaidDrawMethod
-    # img = agent.get_graph().draw_mermaid_png(
-    #         draw_method=MermaidDrawMethod.API,
-    #     )
-    # with open("graph.png", "wb") as f:
-    #     f.write(img)
-    # console.print("GRAPH IMAGE SAVED")
-
-    # print(agent.get_graph().draw_mermaid())
-    ##############################################################################
-
     console.print("[bold green]RAG Agent. Type 'esci', 'exit', 'quit' or 'q' to quit.[/bold green]")
-    console.print("[yellow]The agent will decide when to search documents and when to respond directly.[/yellow]")
+    console.print("[yellow]On-topic answers are grounded in the indexed documents.[/yellow]")
 
     thread_id = "default"
 
@@ -59,7 +56,7 @@ def interactive_loop(cfg: Config):
             break
 
         try:
-            quest = DetectLanguage(question)
+            quest = DetectLanguage(question, online=cfg.online)
             logger.info(f"Language = {quest.lang}, class = {quest}")
         except ValueError as e:
             logger.error(f"Error processing question: {e}")
@@ -85,9 +82,52 @@ def interactive_loop(cfg: Config):
                 console.print("[yellow]No generation returned from agent.[/yellow]")
 
         except Exception as e:
-            logger.error(f"Error during agent execution: {e}")
+            logger.exception("Error during agent execution")
             console.print(f"[red]Error: {escape(str(e))}[/red]")
-            raise e
+            continue
+
+
+def _runtime_mode(config: Config) -> str | None:
+    override = os.environ.get("AGENTIC_RAG_MODE")
+    if override is not None:
+        mode = override.strip().lower()
+        if mode not in {"chat", "gradio"}:
+            raise ValueError("AGENTIC_RAG_MODE must be 'chat' or 'gradio'")
+        return mode
+
+    if config.chat:
+        return "chat"
+    if config.gradio:
+        return "gradio"
+    return None
+
+
+def _validate_source_resources(config: Config) -> None:
+    markdown_dir = Path(config.md_dir)
+    markdown_files = [path for path in markdown_dir.glob("*.md") if path.is_file()]
+    if not markdown_dir.is_dir() or not markdown_files:
+        message = f"No top-level Markdown files found in {markdown_dir}."
+        console.print(f"[red]{message}[/red]")
+        logger.error(message)
+        raise FileNotFoundError(message)
+
+    dictionary_path = Path(config.dizionario_path)
+    if not dictionary_path.is_file():
+        message = f"Dictionary file not found: {dictionary_path}."
+        console.print(f"[red]{message}[/red]")
+        logger.error(message)
+        raise FileNotFoundError(message)
+
+
+def _validate_index_resources(config: Config) -> None:
+    index_dir = Path(config.index_dir)
+    missing = [name for name in _INDEX_FILENAMES if not (index_dir / name).is_file()]
+    if not index_dir.is_dir() or missing:
+        missing_names = ", ".join(missing or _INDEX_FILENAMES)
+        message = f"FAISS index is incomplete at {index_dir}; missing: {missing_names}."
+        console.print(f"[red]{message}[/red]")
+        logger.error(message)
+        raise FileNotFoundError(message)
 
 
 # ------------------------
@@ -97,37 +137,34 @@ def main():
     logger.info("Starting RAG Agent")
     logger.info(f"Python interpreter: {sys.executable}")
     logger.info(f"Python version: {sys.version}")
-    logger.info(f"Using HF cache dir: {cfg.hf_home}")
-    logger.info(f"The network connectivity is: {'online' if ONLINE else 'offline'}")
-    logger.info(f"Online flag is set to: {getattr(cfg, 'online', True)}")
+    logger.info(f"Using HF cache dir: {EFFECTIVE_HF_HOME}")
+    if NETWORK_PROBE_SKIPPED:
+        logger.info("Network connectivity probe skipped because offline mode was requested")
+    else:
+        logger.info(f"The network connectivity is: {'online' if NETWORK_AVAILABLE else 'offline'}")
+    logger.info(f"Effective Hugging Face mode is: {'online' if HF_ONLINE else 'offline'}")
+    logger.info(f"Configured online flag is set to: {cfg.online}")
 
     logger.debug(f"Configuration: {cfg.__dict__}")
 
-    # Check if markdown files exist
-    if not os.path.isdir(cfg.md_dir) or not os.listdir(cfg.md_dir):
-        console.print(f"[yellow]Markdown files not found in {cfg.md_dir}. [/yellow]")
-        logger.error(f"Markdown files not found in {cfg.md_dir}.")
-        raise FileNotFoundError(f"Markdown files not found in {cfg.md_dir}.")
-
-    # Rebuild FAISS index if requested
-    if getattr(cfg, "reindex", False):
-        build_faiss_index(cfg)
-
-    # Ensure FAISS index exists
-    if not os.path.isdir(cfg.index_dir) or not os.listdir(cfg.index_dir):
-        console.print(
-            f"[red]FAISS index not found or empty at {cfg.index_dir}. "
-            "Set 'reindex: true' in config.yaml to build it.[/red]"
-        )
+    mode = _runtime_mode(cfg)
+    if mode is None:
+        console.print("[yellow]Set 'chat: true' or 'gradio: true' in config.yaml to start the agent.[/yellow]")
         return
 
+    _validate_source_resources(cfg)
+
+    # Rebuild FAISS index if requested
+    if cfg.reindex:
+        build_faiss_index(cfg)
+
+    _validate_index_resources(cfg)
+
     # Run interactive chat or Gradio UI
-    if getattr(cfg, "chat", False):
+    if mode == "chat":
         interactive_loop(cfg)
-    elif getattr(cfg, "gradio", False):
+    elif mode == "gradio":
         launch_gradio(cfg)
-    else:
-        console.print("[yellow]Set 'chat: true' or 'gradio: true' in config.yaml to start the agent.[/yellow]")
 
 
 if __name__ == "__main__":

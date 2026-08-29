@@ -9,6 +9,7 @@ the application's logical constraints.
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from agentic_rag.config_schema import Config, load_config
@@ -130,6 +131,19 @@ def test_load_config_raises_validation_error_when_chunk_overlap_is_too_large(
         load_config(path)
 
 
+def test_load_config_raises_when_min_chunk_length_is_not_smaller_than_chunk_size(tmp_path) -> None:
+    """Verify load config raises when min chunk length is not smaller than chunk size."""
+    path = tmp_path / "config.yaml"
+    data = make_valid_config()
+    data["chunk_size"] = 300
+    data["chunk_overlap"] = 50
+    data["min_chunk_length"] = 300
+    write_yaml(path, data)
+
+    with pytest.raises(ValidationError, match="min_chunk_length.*chunk_size"):
+        load_config(path)
+
+
 def test_load_config_raises_validation_error_for_invalid_log_level(tmp_path) -> None:
     """Verify that the schema rejects unsupported log levels."""
     path = tmp_path / "config.yaml"
@@ -139,3 +153,110 @@ def test_load_config_raises_validation_error_for_invalid_log_level(tmp_path) -> 
 
     with pytest.raises(ValidationError, match="log_level"):
         load_config(path)
+
+
+def test_load_config_rejects_directory_path(tmp_path: Path) -> None:
+    """Verify a directory cannot be used as the configuration file."""
+    with pytest.raises(FileNotFoundError, match="not a regular file"):
+        load_config(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "contents, exception_type, message",
+    [
+        ("", ValueError, "empty"),
+        ("- one\n- two\n", TypeError, "top-level mapping"),
+        ("scalar\n", TypeError, "top-level mapping"),
+        ("42\n", TypeError, "top-level mapping"),
+    ],
+)
+def test_load_config_rejects_empty_or_non_mapping_yaml(tmp_path, contents, exception_type, message) -> None:
+    """Verify configuration YAML must contain a nonempty top-level mapping."""
+    path = tmp_path / "config.yaml"
+    path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(exception_type, match=message):
+        load_config(path)
+
+
+def test_load_config_surfaces_malformed_yaml(tmp_path: Path) -> None:
+    """Verify malformed YAML is reported by the YAML parser."""
+    path = tmp_path / "config.yaml"
+    path.write_text("root: [unterminated", encoding="utf-8")
+
+    with pytest.raises(yaml.YAMLError):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {
+            "k": 1,
+            "k_reranked": 1,
+            "fetch_k": 1,
+            "lambda_mult": 0.0,
+            "chunk_size": 2,
+            "chunk_overlap": 1,
+            "min_chunk_length": 1,
+            "max_new_tokens": 1,
+            "temperature": 0.0,
+            "top_p": 1e-12,
+            "top_k": 1,
+            "repetition_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "gradio_port": 1,
+            "max_history_turns": 0,
+        },
+        {
+            "lambda_mult": 1.0,
+            "temperature": 2.0,
+            "top_p": 1.0,
+            "gradio_port": 65535,
+        },
+    ],
+)
+def test_config_accepts_declared_numeric_boundaries(updates) -> None:
+    """Verify inclusive and exclusive numeric boundaries accept their nearest valid values."""
+    data = make_valid_config()
+    data.update(updates)
+
+    config = Config.model_validate(data)
+
+    for field, value in updates.items():
+        assert getattr(config, field) == value
+
+
+@pytest.mark.parametrize(
+    "field, invalid_value",
+    [
+        ("k", 0),
+        ("k_reranked", 0),
+        ("fetch_k", 0),
+        ("lambda_mult", -0.01),
+        ("lambda_mult", 1.01),
+        ("chunk_size", 0),
+        ("chunk_overlap", -1),
+        ("min_chunk_length", 0),
+        ("max_new_tokens", 0),
+        ("temperature", -0.01),
+        ("temperature", 2.01),
+        ("top_p", 0.0),
+        ("top_p", 1.01),
+        ("top_k", 0),
+        ("repetition_penalty", 0.99),
+        ("no_repeat_ngram_size", -1),
+        ("gradio_port", 0),
+        ("gradio_port", 65536),
+        ("max_history_turns", -1),
+    ],
+)
+def test_config_rejects_values_outside_declared_numeric_boundaries(field, invalid_value) -> None:
+    """Verify every constrained numeric field rejects values beyond its schema boundary."""
+    data = make_valid_config()
+    data[field] = invalid_value
+
+    with pytest.raises(ValidationError) as exc_info:
+        Config.model_validate(data)
+
+    assert any(error["loc"] == (field,) for error in exc_info.value.errors())

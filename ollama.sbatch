@@ -8,32 +8,53 @@
 #SBATCH --output=ollama-%j.out
 #SBATCH --error=ollama-%j.err
 
+set -euo pipefail
+
 module load ollama
 
-# Configuration variables - no defaults for easy modification
-PORT=11432
-MODEL_NAME=qwen3-coder:30b
-HOSTNAME=$(hostname -s)
+PORT="${PORT:-11432}"
+MODEL_NAME="${MODEL_NAME:-qwen3-coder:30b}"
+NODE="$(hostname -s)"
 
 export OLLAMA_HOST="127.0.0.1:${PORT}"
-export OLLAMA_KEEP_ALIVE=-1
+export OLLAMA_KEEP_ALIVE="-1"
 export OLLAMA_MODELS="$HOME/.ollama/models"
 
-ollama serve > ollama-${SLURM_JOB_ID}.log 2>&1 &
+ollama serve >"ollama-${SLURM_JOB_ID:-manual}.log" 2>&1 &
 OLLAMA_PID=$!
 
-sleep 5
+READY=false
+for ((attempt = 0; attempt < 60; attempt++)); do
+    if ! kill -0 "${OLLAMA_PID}" 2>/dev/null; then
+        echo "Error: Ollama failed to start" >&2
+        wait "${OLLAMA_PID}"
+        exit 1
+    fi
 
-# Validate Ollama is running
-if ! ps -p $OLLAMA_PID > /dev/null; then
-    echo "Error: Ollama failed to start"
+    if ollama list >/dev/null 2>&1 && kill -0 "${OLLAMA_PID}" 2>/dev/null; then
+        READY=true
+        break
+    fi
+    sleep 1
+done
+
+if [[ "${READY}" != true ]]; then
+    echo "Error: Ollama did not become ready within 60 seconds" >&2
     exit 1
 fi
 
-ollama run ${MODEL_NAME} "warm up" >/dev/null 2>&1 || true
+if ! ollama run "${MODEL_NAME}" "warm up" >/dev/null; then
+    echo "Error: failed to warm up Ollama model ${MODEL_NAME}" >&2
+    exit 1
+fi
 
-# Print SSH tunnel information
+if ! kill -0 "${OLLAMA_PID}" 2>/dev/null; then
+    echo "Error: Ollama stopped during model warm-up" >&2
+    wait "${OLLAMA_PID}"
+    exit 1
+fi
+
 echo "To connect to this Ollama instance, run:"
-echo "ssh -N -L ${PORT}:127.0.0.1:${PORT} ${HOSTNAME}"
+echo "ssh -N -L ${PORT}:127.0.0.1:${PORT} ${NODE}"
 
-wait $OLLAMA_PID
+wait "${OLLAMA_PID}"
