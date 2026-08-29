@@ -15,7 +15,6 @@ from pathlib import Path
 from evaluation.tracing import (
     collect_dataset,
     load_evaluation_config,
-    load_jsonl,
     load_questions,
     utc_now,
     write_json,
@@ -205,12 +204,14 @@ def collect_command(args: argparse.Namespace) -> int:
 
 def score_command(args: argparse.Namespace) -> int:
     config = load_evaluation_config(args.evaluation_config)
-    samples = load_jsonl(args.run_dir.expanduser().resolve() / "samples.jsonl")
-    if not samples:
-        raise ValueError(f"No collected samples to score in {args.run_dir.expanduser().resolve()}")
+    from evaluation.ragas_scoring import score_dataset, validate_scoring_run
+
     scores_path = args.run_dir.expanduser().resolve() / "scores.jsonl"
     if scores_path.exists() and not args.overwrite:
         raise FileExistsError(f"Scores already exist: {scores_path}. Pass --overwrite to replace them.")
+    samples = validate_scoring_run(args.run_dir)
+    if not samples:
+        raise ValueError(f"No collected samples to score in {args.run_dir.expanduser().resolve()}")
     _secure_runtime_environment()
     embedding_device = _require_accelerator("score")
     sample_count = min(len(samples), args.limit) if args.limit is not None else len(samples)
@@ -223,7 +224,6 @@ def score_command(args: argparse.Namespace) -> int:
     try:
         from agentic_rag._load_env import cfg, hf_hub_cache_for
         from agentic_rag.llm_build import build_llm_pipe
-        from evaluation.ragas_scoring import score_dataset
 
         cache_folder = hf_hub_cache_for(cfg.hf_home)
         judge = build_llm_pipe(

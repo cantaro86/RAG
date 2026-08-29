@@ -27,6 +27,7 @@ from evaluation.tracing import (
     read_gzip_json,
     restore_trace_state,
     serialize_snapshots,
+    write_gzip_json,
 )
 
 pytestmark = pytest.mark.evaluation
@@ -78,47 +79,105 @@ def successful_history(document: Document) -> list[SimpleNamespace]:
                 "documents": [],
                 "rewrite_count": 0,
                 "has_docs": False,
+                "social_intent": None,
+                "guardrail_status": None,
             },
-            ["retrieve_and_filter"],
+            ["social_intent"],
         ),
         snapshot(
             2,
             {
                 "question": "Domanda sanitizzata",
                 "documents": [],
+                "rewrite_count": 0,
+                "has_docs": False,
+                "social_intent": "DOMANDA",
+                "guardrail_status": None,
+            },
+            ["init_first_question"],
+        ),
+        snapshot(
+            3,
+            {
+                "question": "Domanda sanitizzata",
+                "documents": [],
+                "rewrite_count": 0,
+                "has_docs": False,
+                "social_intent": "DOMANDA",
+                "guardrail_status": None,
+                "first_question": True,
+            },
+            ["domain_guardrail"],
+        ),
+        snapshot(
+            4,
+            {
+                "question": "Domanda sanitizzata",
+                "documents": [],
+                "rewrite_count": 0,
+                "has_docs": False,
+                "social_intent": "DOMANDA",
+                "guardrail_status": "ON_TOPIC",
+            },
+            ["retrieve_and_filter"],
+        ),
+        snapshot(
+            5,
+            {
+                "question": "Domanda sanitizzata",
+                "documents": [],
                 "rewrite_count": 1,
                 "has_docs": False,
+                "social_intent": "DOMANDA",
+                "guardrail_status": "ON_TOPIC",
             },
             ["transform_query"],
         ),
         snapshot(
-            3,
+            6,
             {
                 "question": "Domanda trasformata",
                 "documents": [],
                 "rewrite_count": 1,
                 "has_docs": False,
+                "social_intent": "DOMANDA",
+                "guardrail_status": "ON_TOPIC",
             },
             ["retrieve_and_filter"],
         ),
         snapshot(
-            4,
+            7,
             {
                 "question": "Domanda trasformata",
                 "documents": [document],
                 "rewrite_count": 0,
                 "has_docs": True,
+                "social_intent": "DOMANDA",
                 "guardrail_status": "ON_TOPIC",
             },
             ["generate_with_docs"],
         ),
         snapshot(
-            5,
+            8,
             {
                 "question": "Domanda trasformata",
                 "documents": [document],
                 "rewrite_count": 0,
                 "has_docs": True,
+                "social_intent": "DOMANDA",
+                "guardrail_status": "ON_TOPIC",
+                "generation": "Risposta finale",
+            },
+            ["clean_answer"],
+        ),
+        snapshot(
+            9,
+            {
+                "question": "Domanda trasformata",
+                "documents": [document],
+                "rewrite_count": 0,
+                "has_docs": True,
+                "social_intent": "DOMANDA",
                 "guardrail_status": "ON_TOPIC",
                 "generation": "Risposta finale",
             },
@@ -222,7 +281,7 @@ def test_serialize_snapshots_is_chronological_and_deduplicates_documents():
 
     steps, documents = serialize_snapshots(successful_history(document))
 
-    assert [step["checkpoint_step"] for step in steps] == [-1, 0, 1, 2, 3, 4, 5]
+    assert [step["checkpoint_step"] for step in steps] == [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert steps[2]["nodes"] == ["sanitize_question"]
     assert len(documents) == 1
     restored = restore_trace_state(steps[-1]["state"], documents)
@@ -239,6 +298,8 @@ def test_collect_question_records_reformulations_retrievals_and_cleanup():
     outcome = collect_question(agent, question, question_validator=lambda text: text)
 
     assert outcome.trace["status"] == "completed"
+    assert outcome.sample["schema_version"] == 2
+    assert outcome.sample["response_type"] == "rag"
     assert outcome.sample["user_input"] == "Domanda originale"
     assert outcome.sample["retrieved_contexts"] == ["Contesto"]
     diagnostics = outcome.trace["diagnostics"]
@@ -249,10 +310,14 @@ def test_collect_question_records_reformulations_retrievals_and_cleanup():
     ]
     assert diagnostics["node_path"] == [
         "sanitize_question",
+        "social_intent",
+        "init_first_question",
+        "domain_guardrail",
         "retrieve_and_filter",
         "transform_query",
         "retrieve_and_filter",
         "generate_with_docs",
+        "clean_answer",
     ]
     assert len(diagnostics["retrieval_attempts"]) == 2
     assert diagnostics["retrieval_succeeded"] is True
@@ -263,7 +328,7 @@ def test_collect_question_records_reformulations_retrievals_and_cleanup():
 
 def test_collect_question_keeps_partial_trace_after_failure():
     history = [
-        snapshot(0, {"question": "Domanda originale", "guardrail_status": None}, ["guardrail"]),
+        snapshot(0, {"question": "Domanda originale", "social_intent": None}, ["sanitize_question"]),
         snapshot(-1, {}, ["__start__"], source="input"),
     ]
     agent = FakeAgent(None, history, error=RuntimeError("node failed"))
@@ -290,11 +355,17 @@ def test_collect_dataset_writes_incremental_artifacts(tmp_path, capsys):
     summary = collect_dataset(agent, questions, run_dir, run_metadata={"run_id": "test-run"})
 
     assert summary["collection"]["samples"] == 1
+    assert summary["schema_version"] == 2
+    assert summary["collection"]["samples_by_response_type"] == {"rag": 1, "non_rag": 0}
     samples = load_jsonl(run_dir / "samples.jsonl")
+    assert samples[0]["schema_version"] == 2
+    assert samples[0]["response_type"] == "rag"
     assert samples[0]["trace_path"] == "traces/q0001-abcd1234.json.gz"
     trace = read_gzip_json(run_dir / samples[0]["trace_path"])
     assert trace["raw_question"] == "Domanda originale"
-    assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "collected"
+    manifest = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == 2
+    assert manifest["status"] == "collected"
     assert stat.S_IMODE(run_dir.stat().st_mode) == 0o700
     assert stat.S_IMODE((run_dir / "samples.jsonl").stat().st_mode) == 0o600
     assert stat.S_IMODE((run_dir / samples[0]["trace_path"]).stat().st_mode) == 0o600
@@ -365,7 +436,41 @@ def test_collect_question_uses_real_graph_checkpoint_history(mock_ctx, config_da
         "clean_answer",
     ]
     assert outcome.sample["response"] == "Mocked RAG response"
+    assert outcome.sample["schema_version"] == 2
+    assert outcome.sample["response_type"] == "rag"
     assert outcome.sample["retrieved_contexts"] == ["Contesto reale"]
+
+
+@pytest.mark.parametrize(
+    ("social_intent", "guardrail_status", "terminal_node"),
+    [
+        ("SALUTO", "ON_TOPIC", "handle_hello"),
+        ("GRAZIE", "ON_TOPIC", "handle_thanks"),
+        ("DOMANDA", "OFF_TOPIC", "handle_off_topic"),
+        ("DOMANDA", "ON_TOPIC", "no_generation"),
+    ],
+)
+def test_collect_question_keeps_non_rag_response(
+    mock_ctx,
+    config_data,
+    social_intent,
+    guardrail_status,
+    terminal_node,
+):
+    mock_ctx.social_intent_chain.invoke.return_value = social_intent
+    mock_ctx.domain_guardrail_chain.invoke.return_value = guardrail_status
+    if terminal_node == "no_generation":
+        mock_ctx.retriever.invoke.return_value = []
+    agent = build_agent_graph(mock_ctx, config_data)
+    question = EvaluationQuestion(id="q0001-abcd1234", line_number=1, text="Domanda")
+
+    outcome = collect_question(agent, question)
+
+    assert outcome.trace["status"] == "completed"
+    assert outcome.trace["diagnostics"]["terminal_node"] == terminal_node
+    assert outcome.sample["schema_version"] == 2
+    assert outcome.sample["response_type"] == "non_rag"
+    assert outcome.sample["retrieved_contexts"] == []
 
 
 def test_collect_question_records_failed_langgraph_task():
@@ -391,26 +496,70 @@ def test_collect_question_records_failed_langgraph_task():
     assert outcome.trace["diagnostics"]["failed_nodes"] == ["failing_node"]
 
 
+def write_scoring_samples(run_dir, samples):
+    traces_dir = run_dir / "traces"
+    traces_dir.mkdir()
+    records = []
+    for sample in samples:
+        record = dict(sample)
+        trace_path = f"traces/{record['id']}.json.gz"
+        record["trace_path"] = trace_path
+        terminal_node = "clean_answer" if record["response_type"] == "rag" else "handle_hello"
+        documents = {
+            f"doc-{index}": {"page_content": context, "metadata": {}}
+            for index, context in enumerate(record["retrieved_contexts"], 1)
+        }
+        document_references = [{"$document": document_id} for document_id in documents]
+        write_gzip_json(
+            run_dir / trace_path,
+            {
+                "schema_version": 2,
+                "question_id": record["id"],
+                "raw_question": record["user_input"],
+                "status": "completed",
+                "documents": documents,
+                "steps": [
+                    {
+                        "state": {
+                            "generation": record["response"],
+                            "documents": document_references,
+                        }
+                    }
+                ],
+                "diagnostics": {"terminal_node": terminal_node},
+            },
+        )
+        records.append(record)
+    (run_dir / "samples.jsonl").write_text(
+        "".join(json.dumps(record) + "\n" for record in records),
+        encoding="utf-8",
+    )
+
+
 def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypatch, capsys):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     samples = [
         {
+            "schema_version": 2,
             "id": "q1",
+            "response_type": "rag",
             "user_input": "Domanda",
             "response": "Risposta",
             "retrieved_contexts": ["Contesto"],
         },
         {
+            "schema_version": 2,
             "id": "q2",
+            "response_type": "non_rag",
             "user_input": "Domanda senza documenti",
             "response": "Nessun documento",
             "retrieved_contexts": [],
         },
     ]
-    (run_dir / "samples.jsonl").write_text("".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8")
-    (run_dir / "summary.json").write_text('{"schema_version": 1, "collection": {}}\n', encoding="utf-8")
-    (run_dir / "run.json").write_text('{"status": "collected"}\n', encoding="utf-8")
+    write_scoring_samples(run_dir, samples)
+    (run_dir / "summary.json").write_text('{"schema_version": 2, "collection": {}}\n', encoding="utf-8")
+    (run_dir / "run.json").write_text('{"schema_version": 2, "status": "collected"}\n', encoding="utf-8")
     config_data = evaluation_config_data()
     config_data["metrics"] = ["faithfulness", "answer_relevancy"]
     config = EvaluationConfig.model_validate(config_data)
@@ -434,7 +583,20 @@ def test_score_dataset_uses_context_rules_and_updates_summary(tmp_path, monkeypa
         "skipped": 1,
     }
     assert summary["scoring"]["metrics"]["answer_relevancy"]["scored"] == 2
+    assert summary["schema_version"] == 2
+    assert summary["scoring"]["samples_by_response_type"] == {"rag": 1, "non_rag": 1}
+    assert summary["scoring"]["metrics_by_response_type"]["rag"]["faithfulness"]["scored"] == 1
+    assert summary["scoring"]["metrics_by_response_type"]["non_rag"]["faithfulness"] == {
+        "mean": None,
+        "scored": 0,
+        "errors": 0,
+        "skipped": 1,
+    }
+    assert summary["scoring"]["metrics_by_response_type"]["non_rag"]["answer_relevancy"]["scored"] == 1
     score_records = load_jsonl(run_dir / "scores.jsonl")
+    assert score_records[0]["schema_version"] == 2
+    assert score_records[0]["response_type"] == "rag"
+    assert score_records[1]["response_type"] == "non_rag"
     assert score_records[1]["skipped"]["faithfulness"] == "No retrieved contexts"
     assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "scored"
     captured = capsys.readouterr()
@@ -446,13 +608,15 @@ def test_score_dataset_fails_clearly_when_no_metric_can_be_scored(tmp_path, monk
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     sample = {
+        "schema_version": 2,
         "id": "q1",
+        "response_type": "non_rag",
         "user_input": "Domanda",
         "response": "Nessun documento",
         "retrieved_contexts": [],
     }
-    (run_dir / "samples.jsonl").write_text(json.dumps(sample) + "\n", encoding="utf-8")
-    (run_dir / "run.json").write_text('{"status": "collected"}\n', encoding="utf-8")
+    write_scoring_samples(run_dir, [sample])
+    (run_dir / "run.json").write_text('{"schema_version": 2, "status": "collected"}\n', encoding="utf-8")
     config_data = evaluation_config_data()
     config_data["metrics"] = ["faithfulness"]
     config = EvaluationConfig.model_validate(config_data)
@@ -471,8 +635,15 @@ def test_score_dataset_fails_clearly_when_no_metric_can_be_scored(tmp_path, monk
 def test_score_dataset_rejects_existing_scores_without_overwrite(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    sample = {"id": "q1", "user_input": "Domanda", "response": "Risposta", "retrieved_contexts": ["Testo"]}
-    (run_dir / "samples.jsonl").write_text(json.dumps(sample) + "\n", encoding="utf-8")
+    sample = {
+        "schema_version": 2,
+        "id": "q1",
+        "response_type": "rag",
+        "user_input": "Domanda",
+        "response": "Risposta",
+        "retrieved_contexts": ["Testo"],
+    }
+    write_scoring_samples(run_dir, [sample])
     (run_dir / "scores.jsonl").write_text("existing\n", encoding="utf-8")
     config = EvaluationConfig.model_validate(evaluation_config_data())
     build_judge = MagicMock()
@@ -485,11 +656,76 @@ def test_score_dataset_rejects_existing_scores_without_overwrite(tmp_path, monke
     build_judge.assert_not_called()
 
 
+def test_score_dataset_requires_schema_version_2(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    sample = {
+        "schema_version": 1,
+        "id": "q1",
+        "response_type": "rag",
+        "user_input": "Domanda",
+        "response": "Risposta",
+        "retrieved_contexts": ["Testo"],
+    }
+    write_scoring_samples(run_dir, [sample])
+    config = EvaluationConfig.model_validate(evaluation_config_data())
+
+    with pytest.raises(ValueError, match="schema version 1; expected 2"):
+        score_dataset(run_dir, config, MagicMock(), cache_folder="/tmp/cache", embedding_device="cpu")
+
+
+def test_score_dataset_rejects_unreferenced_version_1_trace(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    sample = {
+        "schema_version": 2,
+        "id": "q1",
+        "response_type": "rag",
+        "user_input": "Domanda",
+        "response": "Risposta",
+        "retrieved_contexts": ["Testo"],
+    }
+    write_scoring_samples(run_dir, [sample])
+    write_gzip_json(
+        run_dir / "traces" / "failed.json.gz",
+        {"schema_version": 1, "question_id": "failed", "status": "failed"},
+    )
+    config = EvaluationConfig.model_validate(evaluation_config_data())
+
+    with pytest.raises(ValueError, match="schema version 1; expected 2"):
+        score_dataset(run_dir, config, MagicMock(), cache_folder="/tmp/cache", embedding_device="cpu")
+
+
+def test_score_dataset_rejects_duplicate_sample_ids(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    sample = {
+        "schema_version": 2,
+        "id": "q1",
+        "response_type": "rag",
+        "user_input": "Domanda",
+        "response": "Risposta",
+        "retrieved_contexts": ["Testo"],
+    }
+    write_scoring_samples(run_dir, [sample, sample])
+    config = EvaluationConfig.model_validate(evaluation_config_data())
+
+    with pytest.raises(ValueError, match="Duplicate evaluation sample id: q1"):
+        score_dataset(run_dir, config, MagicMock(), cache_folder="/tmp/cache", embedding_device="cpu")
+
+
 def test_score_dataset_rejects_non_finite_metric_results(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    sample = {"id": "q1", "user_input": "Domanda", "response": "Risposta", "retrieved_contexts": ["Testo"]}
-    (run_dir / "samples.jsonl").write_text(json.dumps(sample) + "\n", encoding="utf-8")
+    sample = {
+        "schema_version": 2,
+        "id": "q1",
+        "response_type": "rag",
+        "user_input": "Domanda",
+        "response": "Risposta",
+        "retrieved_contexts": ["Testo"],
+    }
+    write_scoring_samples(run_dir, [sample])
     config_data = evaluation_config_data()
     config_data["metrics"] = ["faithfulness"]
     config = EvaluationConfig.model_validate(config_data)
@@ -516,11 +752,25 @@ def test_limited_score_run_is_marked_partial(tmp_path, monkeypatch):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     samples = [
-        {"id": "q1", "user_input": "Uno", "response": "Risposta", "retrieved_contexts": []},
-        {"id": "q2", "user_input": "Due", "response": "Risposta", "retrieved_contexts": []},
+        {
+            "schema_version": 2,
+            "id": "q1",
+            "response_type": "rag",
+            "user_input": "Uno",
+            "response": "Risposta",
+            "retrieved_contexts": ["Contesto"],
+        },
+        {
+            "schema_version": 2,
+            "id": "q2",
+            "response_type": "non_rag",
+            "user_input": "Due",
+            "response": "Risposta",
+            "retrieved_contexts": [],
+        },
     ]
-    (run_dir / "samples.jsonl").write_text("".join(json.dumps(sample) + "\n" for sample in samples), encoding="utf-8")
-    (run_dir / "run.json").write_text('{"status": "collected"}\n', encoding="utf-8")
+    write_scoring_samples(run_dir, samples)
+    (run_dir / "run.json").write_text('{"schema_version": 2, "status": "collected"}\n', encoding="utf-8")
     config_data = evaluation_config_data()
     config_data["metrics"] = ["answer_relevancy"]
     config = EvaluationConfig.model_validate(config_data)
@@ -546,4 +796,6 @@ def test_limited_score_run_is_marked_partial(tmp_path, monkeypatch):
 
     assert summary["scoring"]["samples"] == 1
     assert summary["scoring"]["available_samples"] == 2
+    assert summary["scoring"]["samples_by_response_type"] == {"rag": 1, "non_rag": 0}
+    assert summary["scoring"]["available_samples_by_response_type"] == {"rag": 1, "non_rag": 1}
     assert json.loads((run_dir / "run.json").read_text(encoding="utf-8"))["status"] == "scored_partial"

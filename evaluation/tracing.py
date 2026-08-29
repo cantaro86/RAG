@@ -17,10 +17,15 @@ from langchain_core.documents import Document
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from tqdm import tqdm
 
-TRACE_SCHEMA_VERSION = 2
-SAMPLE_SCHEMA_VERSION = 1
+EVALUATION_SCHEMA_VERSION = 2
+TRACE_SCHEMA_VERSION = EVALUATION_SCHEMA_VERSION
+SAMPLE_SCHEMA_VERSION = EVALUATION_SCHEMA_VERSION
 
 MetricName = Literal["faithfulness", "context_utilization", "answer_relevancy"]
+ResponseType = Literal["rag", "non_rag"]
+RESPONSE_TYPES: tuple[ResponseType, ...] = ("rag", "non_rag")
+RAG_TERMINAL_NODE = "clean_answer"
+NON_RAG_TERMINAL_NODES = {"handle_hello", "handle_thanks", "handle_off_topic", "no_generation"}
 
 
 class JudgeConfig(BaseModel):
@@ -301,6 +306,77 @@ def derive_trace_diagnostics(raw_question: str, steps: list[dict[str, Any]]) -> 
     }
 
 
+def response_type_for_terminal(terminal_node: Any) -> ResponseType:
+    if terminal_node == RAG_TERMINAL_NODE:
+        return "rag"
+    if isinstance(terminal_node, str) and terminal_node in NON_RAG_TERMINAL_NODES:
+        return "non_rag"
+    raise ValueError(f"Completed graph has unknown terminal node: {terminal_node!r}")
+
+
+def classify_response_type(diagnostics: Mapping[str, Any], final_documents: list[Document]) -> ResponseType:
+    terminal_node = diagnostics.get("terminal_node")
+    response_type = response_type_for_terminal(terminal_node)
+    if (response_type == "rag") == bool(final_documents):
+        return response_type
+    raise ValueError(
+        f"Completed graph has inconsistent terminal node and documents: {terminal_node!r}, "
+        f"{len(final_documents)} documents"
+    )
+
+
+def require_schema_version(value: Mapping[str, Any], source: str | Path) -> None:
+    version = value.get("schema_version")
+    if version != EVALUATION_SCHEMA_VERSION:
+        raise ValueError(
+            f"Evaluation artifact {source} uses schema version {version!r}; expected {EVALUATION_SCHEMA_VERSION}"
+        )
+
+
+def validate_sample_trace(sample: Mapping[str, Any], trace: Mapping[str, Any], source: str | Path) -> None:
+    sample_id = sample.get("id")
+    if trace.get("question_id") != sample_id:
+        raise ValueError(f"Evaluation sample {sample_id} points to a trace for {trace.get('question_id')!r}")
+    if trace.get("status") != "completed":
+        raise ValueError(f"Evaluation sample {sample_id} points to an incomplete trace")
+    if trace.get("raw_question") != sample.get("user_input"):
+        raise ValueError(f"Evaluation sample {sample_id} does not match its trace question")
+
+    diagnostics = trace.get("diagnostics")
+    if not isinstance(diagnostics, Mapping):
+        raise ValueError(f"Evaluation trace {source} has no diagnostics")
+    expected_response_type = response_type_for_terminal(diagnostics.get("terminal_node"))
+    if sample.get("response_type") != expected_response_type:
+        raise ValueError(
+            f"Evaluation sample {sample_id} has response_type {sample.get('response_type')!r}, "
+            f"but terminal node {diagnostics.get('terminal_node')!r} implies {expected_response_type!r}"
+        )
+
+    steps = trace.get("steps")
+    final_state = (
+        steps[-1].get("state") if isinstance(steps, list) and steps and isinstance(steps[-1], Mapping) else None
+    )
+    if not isinstance(final_state, Mapping):
+        raise ValueError(f"Evaluation trace {source} has no final state")
+    if final_state.get("generation") != sample.get("response"):
+        raise ValueError(f"Evaluation sample {sample_id} does not match its final trace response")
+
+    documents = trace.get("documents")
+    references = final_state.get("documents")
+    if not isinstance(documents, Mapping) or not isinstance(references, list):
+        raise ValueError(f"Evaluation trace {source} has invalid final documents")
+    contexts = []
+    for reference in references:
+        if not isinstance(reference, Mapping) or not isinstance(reference.get("$document"), str):
+            raise ValueError(f"Evaluation trace {source} has an invalid document reference")
+        payload = documents.get(reference["$document"])
+        if not isinstance(payload, Mapping) or not isinstance(payload.get("page_content"), str):
+            raise ValueError(f"Evaluation trace {source} has an unresolved document reference")
+        contexts.append(payload["page_content"])
+    if contexts != sample.get("retrieved_contexts"):
+        raise ValueError(f"Evaluation sample {sample_id} does not match its final trace contexts")
+
+
 def _error_record(error: Exception) -> dict[str, str]:
     return {"type": type(error).__name__, "message": str(error)}
 
@@ -374,6 +450,7 @@ def collect_question(
             isinstance(document, Document) for document in final_documents
         ):
             raise TypeError("Final graph state documents must be a list of Document objects")
+        response_type = classify_response_type(trace["diagnostics"], final_documents)
     except Exception as error:
         trace["status"] = "failed"
         trace["error"] = _error_record(error)
@@ -382,6 +459,7 @@ def collect_question(
     sample = {
         "schema_version": SAMPLE_SCHEMA_VERSION,
         "id": question.id,
+        "response_type": response_type,
         "user_input": question.text,
         "response": generation,
         "retrieved_contexts": [document.page_content for document in final_documents],
@@ -482,16 +560,17 @@ def collect_dataset(
     samples_path.chmod(0o600)
 
     manifest = {
-        "schema_version": 1,
+        **dict(run_metadata or {}),
+        "schema_version": EVALUATION_SCHEMA_VERSION,
         "status": "collecting",
         "started_at": utc_now(),
         "question_count": len(questions),
-        **dict(run_metadata or {}),
     }
     write_json(run_dir / "run.json", manifest)
 
     completed_count = 0
     sample_count = 0
+    samples_by_response_type = {response_type: 0 for response_type in RESPONSE_TYPES}
     retrieval_succeeded_count = 0
     reformulated_count = 0
     retrieval_attempt_count = 0
@@ -510,6 +589,7 @@ def collect_dataset(
                     outcome.sample["trace_path"] = trace_relative_path.as_posix()
                     append_jsonl(samples_path, outcome.sample)
                     sample_count += 1
+                    samples_by_response_type[outcome.sample["response_type"]] += 1
                 if outcome.trace["status"] == "completed":
                     completed_count += 1
                     diagnostics = outcome.trace["diagnostics"]
@@ -535,12 +615,13 @@ def collect_dataset(
         raise
 
     summary = {
-        "schema_version": 1,
+        "schema_version": EVALUATION_SCHEMA_VERSION,
         "collection": {
             "questions": len(questions),
             "completed": completed_count,
             "failed": len(questions) - completed_count,
             "samples": sample_count,
+            "samples_by_response_type": samples_by_response_type,
             "retrieval_succeeded": retrieval_succeeded_count,
             "questions_reformulated": reformulated_count,
             "retrieval_attempts": retrieval_attempt_count,

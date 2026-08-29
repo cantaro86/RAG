@@ -12,7 +12,13 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 
-from evaluation.tracing import load_jsonl, read_gzip_json
+from evaluation.tracing import (
+    RESPONSE_TYPES,
+    load_jsonl,
+    read_gzip_json,
+    require_schema_version,
+    validate_sample_trace,
+)
 
 EXCEL_CELL_LIMIT = 32_767
 EXCEL_TRUNCATION_NOTICE = "\n\n[TRUNCATED: Excel cell limit reached]"
@@ -28,7 +34,10 @@ CLASSIFICATION_LABELS = {
 COLUMNS = (
     ("question_line", "Original nonblank question line number.", 14),
     ("collection_status", "Trace outcome: completed or failed.", 18),
-    ("classification", "Readable guardrail class: on_topic, off_topic, greeting, or thanks.", 16),
+    ("response_type", "Response category used for reporting: rag or non_rag.", 16),
+    ("classification", "Derived route class: on_topic, off_topic, greeting, or thanks.", 16),
+    ("social_intent", "Final social_intent output: SALUTO, GRAZIE, or DOMANDA.", 16),
+    ("guardrail_status", "Final domain_guardrail output: ON_TOPIC or OFF_TOPIC.", 18),
     ("user_input", "Original question submitted to the graph.", 45),
     ("sanitized_question", "Question after sanitize_question.", 45),
     ("transformed_question", "Last question produced by transform_query, if it ran.", 45),
@@ -69,12 +78,14 @@ def _load_json_object(path: Path, *, required: bool) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise TypeError(f"Expected a JSON object in {path}")
+    require_schema_version(value, path)
     return value
 
 
 def _index_records(records: Iterable[Mapping[str, Any]], source: Path) -> dict[str, Mapping[str, Any]]:
     indexed: dict[str, Mapping[str, Any]] = {}
     for record in records:
+        require_schema_version(record, source)
         record_id = record.get("id")
         if not isinstance(record_id, str) or not record_id:
             raise ValueError(f"Record in {source} has no string id")
@@ -92,6 +103,7 @@ def _trace_index(run_dir: Path) -> dict[str, dict[str, Any]]:
     traces: dict[str, dict[str, Any]] = {}
     for trace_path in sorted(traces_dir.glob("*.json.gz")):
         trace = read_gzip_json(trace_path)
+        require_schema_version(trace, trace_path)
         question_id = trace.get("question_id")
         if not isinstance(question_id, str) or not question_id:
             raise ValueError(f"Trace has no string question_id: {trace_path}")
@@ -235,7 +247,10 @@ def _result_row(
     return {
         "question_line": trace.get("question_line"),
         "collection_status": trace.get("status"),
+        "response_type": sample.get("response_type"),
         "classification": classification,
+        "social_intent": diagnostics.get("social_intent"),
+        "guardrail_status": diagnostics.get("guardrail_status"),
         "user_input": user_input,
         "sanitized_question": sanitized_question,
         "transformed_question": transformed_question,
@@ -263,9 +278,29 @@ def build_result_rows(run_dir: Path) -> list[dict[str, Any]]:
     orphan_samples = sorted(set(samples) - set(traces))
     if orphan_samples:
         raise ValueError(f"Samples have no corresponding trace: {', '.join(orphan_samples)}")
+    for question_id, sample in samples.items():
+        response_type = sample.get("response_type")
+        if response_type not in RESPONSE_TYPES:
+            raise ValueError(f"Sample {question_id} has invalid response_type: {response_type!r}")
+        contexts = sample.get("retrieved_contexts")
+        if not isinstance(contexts, list) or not all(isinstance(context, str) for context in contexts):
+            raise ValueError(f"Sample {question_id} has invalid retrieved contexts")
+        if (response_type == "rag") != bool(contexts):
+            raise ValueError(f"Sample {question_id} has inconsistent response_type and contexts")
+        expected_trace_path = f"traces/{question_id}.json.gz"
+        if sample.get("trace_path") != expected_trace_path:
+            raise ValueError(f"Sample {question_id} has invalid trace_path: {sample.get('trace_path')!r}")
+        validate_sample_trace(sample, traces[question_id], expected_trace_path)
     orphan_scores = sorted(set(scores) - set(samples))
     if orphan_scores:
         raise ValueError(f"Scores have no corresponding sample: {', '.join(orphan_scores)}")
+    mismatched_response_types = sorted(
+        question_id
+        for question_id, score in scores.items()
+        if score.get("response_type") != samples[question_id].get("response_type")
+    )
+    if mismatched_response_types:
+        raise ValueError(f"Scores have mismatched response types: {', '.join(mismatched_response_types)}")
 
     ordered_traces = sorted(
         traces.items(),
@@ -391,7 +426,7 @@ def _write_legend_sheet(workbook: Workbook) -> None:
     for name, description, _width in COLUMNS:
         worksheet.append((name, description))
     worksheet.append(())
-    worksheet.append(("Classification", "Internal guardrail value"))
+    worksheet.append(("Route classification", "Internal graph value"))
     for raw, readable in CLASSIFICATION_LABELS.items():
         worksheet.append((readable, raw))
     _style_header(worksheet[1])

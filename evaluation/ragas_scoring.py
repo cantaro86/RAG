@@ -7,12 +7,23 @@ import os
 from collections.abc import Mapping
 from pathlib import Path
 from threading import Lock
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 from tqdm import tqdm
 
-from evaluation.tracing import EvaluationConfig, load_jsonl, utc_now, write_json
+from evaluation.tracing import (
+    EVALUATION_SCHEMA_VERSION,
+    RESPONSE_TYPES,
+    EvaluationConfig,
+    ResponseType,
+    load_jsonl,
+    read_gzip_json,
+    require_schema_version,
+    utc_now,
+    validate_sample_trace,
+    write_json,
+)
 
 ResponseModel = TypeVar("ResponseModel", bound=BaseModel)
 
@@ -153,18 +164,88 @@ def _build_metrics(config: EvaluationConfig, judge, *, cache_folder: str, embedd
     return metrics
 
 
-def _validate_sample(sample: Mapping[str, Any]) -> tuple[str, str, str, list[str]]:
+def _validate_sample(sample: Mapping[str, Any]) -> tuple[str, ResponseType, str, str, list[str]]:
+    require_schema_version(sample, "samples.jsonl record")
     sample_id = sample.get("id")
+    response_type = sample.get("response_type")
     user_input = sample.get("user_input")
     response = sample.get("response")
     contexts = sample.get("retrieved_contexts")
     if not isinstance(sample_id, str) or not sample_id:
         raise ValueError("Evaluation sample has no string id")
+    if response_type not in RESPONSE_TYPES:
+        raise ValueError(f"Evaluation sample {sample_id} has invalid response_type: {response_type!r}")
     if not isinstance(user_input, str) or not isinstance(response, str):
         raise ValueError(f"Evaluation sample {sample_id} has invalid input or response")
     if not isinstance(contexts, list) or not all(isinstance(context, str) for context in contexts):
         raise ValueError(f"Evaluation sample {sample_id} has invalid retrieved contexts")
-    return sample_id, user_input, response, contexts
+    if response_type == "rag" and not contexts:
+        raise ValueError(f"RAG evaluation sample {sample_id} has no retrieved contexts")
+    if response_type == "non_rag" and contexts:
+        raise ValueError(f"Non-RAG evaluation sample {sample_id} has retrieved contexts")
+    return sample_id, cast(ResponseType, response_type), user_input, response, contexts
+
+
+def validate_scoring_run(run_dir: Path) -> list[dict[str, Any]]:
+    run_dir = run_dir.expanduser().resolve()
+    samples_path = run_dir / "samples.jsonl"
+    samples = load_jsonl(samples_path)
+    traces_dir = run_dir / "traces"
+    if not traces_dir.is_dir():
+        raise FileNotFoundError(f"Trace directory not found: {traces_dir}")
+    traces: dict[str, tuple[Path, dict[str, Any]]] = {}
+    for trace_path in sorted(traces_dir.glob("*.json.gz")):
+        trace = read_gzip_json(trace_path)
+        require_schema_version(trace, trace_path)
+        question_id = trace.get("question_id")
+        if not isinstance(question_id, str) or not question_id:
+            raise ValueError(f"Trace has no string question_id: {trace_path}")
+        if question_id in traces:
+            raise ValueError(f"Duplicate trace question id: {question_id}")
+        traces[question_id] = (trace_path, trace)
+
+    sample_ids: set[str] = set()
+    for sample in samples:
+        sample_id, _response_type, _user_input, _response, _contexts = _validate_sample(sample)
+        if sample_id in sample_ids:
+            raise ValueError(f"Duplicate evaluation sample id: {sample_id}")
+        sample_ids.add(sample_id)
+        trace_relative_path = sample.get("trace_path")
+        expected_trace_path = f"traces/{sample_id}.json.gz"
+        if trace_relative_path != expected_trace_path:
+            raise ValueError(f"Evaluation sample {sample_id} has invalid trace_path: {trace_relative_path!r}")
+        trace_entry = traces.get(sample_id)
+        if trace_entry is None:
+            raise FileNotFoundError(f"Trace not found for evaluation sample {sample_id}")
+        trace_path, trace = trace_entry
+        validate_sample_trace(sample, trace, trace_path)
+
+    for name in ("run.json", "summary.json"):
+        path = run_dir / name
+        if not path.is_file():
+            continue
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise TypeError(f"Expected a JSON object in {path}")
+        require_schema_version(value, path)
+    return samples
+
+
+def _metric_summary(
+    metric_names: Mapping[str, Any],
+    values: Mapping[str, list[float]],
+    errors: Mapping[str, int],
+    skipped: Mapping[str, int],
+) -> dict[str, dict[str, float | int | None]]:
+    return {
+        name: {
+            "mean": sum(values[name]) / len(values[name]) if values[name] else None,
+            "scored": len(values[name]),
+            "errors": errors[name],
+            "skipped": skipped[name],
+        }
+        for name in metric_names
+    }
 
 
 def score_dataset(
@@ -178,20 +259,34 @@ def score_dataset(
     overwrite: bool = False,
 ) -> dict[str, Any]:
     run_dir = run_dir.expanduser().resolve()
-    all_samples = load_jsonl(run_dir / "samples.jsonl")
-    samples = all_samples
-    if limit is not None:
-        samples = samples[:limit]
-    if not samples:
-        raise ValueError(f"No collected samples to score in {run_dir}")
-
     scores_path = run_dir / "scores.jsonl"
     if scores_path.exists() and not overwrite:
         raise FileExistsError(f"Scores already exist: {scores_path}. Pass --overwrite to replace them.")
 
+    all_samples = validate_scoring_run(run_dir)
+    validated_all_samples = [_validate_sample(sample) for sample in all_samples]
+    validated_samples = validated_all_samples
+    if limit is not None:
+        validated_samples = validated_samples[:limit]
+    if not validated_samples:
+        raise ValueError(f"No collected samples to score in {run_dir}")
+
+    summary_path = run_dir / "summary.json"
+    summary = (
+        json.loads(summary_path.read_text(encoding="utf-8"))
+        if summary_path.is_file()
+        else {"schema_version": EVALUATION_SCHEMA_VERSION}
+    )
+    if not isinstance(summary, dict):
+        raise TypeError(f"Expected a JSON object in {summary_path}")
+    require_schema_version(summary, summary_path)
+
     run_path = run_dir / "run.json"
     if run_path.is_file():
         manifest = json.loads(run_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict):
+            raise TypeError(f"Expected a JSON object in {run_path}")
+        require_schema_version(manifest, run_path)
         manifest.update(
             {
                 "status": "scoring",
@@ -210,15 +305,25 @@ def score_dataset(
     values: dict[str, list[float]] = {name: [] for name in metrics}
     errors: dict[str, int] = {name: 0 for name in metrics}
     skipped: dict[str, int] = {name: 0 for name in metrics}
+    values_by_response_type = {response_type: {name: [] for name in metrics} for response_type in RESPONSE_TYPES}
+    errors_by_response_type = {response_type: {name: 0 for name in metrics} for response_type in RESPONSE_TYPES}
+    skipped_by_response_type = {response_type: {name: 0 for name in metrics} for response_type in RESPONSE_TYPES}
 
-    operation_count = len(samples) * len(metrics)
+    operation_count = len(validated_samples) * len(metrics)
     with tqdm(total=operation_count, desc="Scoring metrics", unit="metric") as progress:
-        for sample_number, sample in enumerate(samples, 1):
-            sample_id, user_input, response, contexts = _validate_sample(sample)
-            score_record: dict[str, Any] = {"id": sample_id, "metrics": {}, "errors": {}, "skipped": {}}
+        for sample_number, sample in enumerate(validated_samples, 1):
+            sample_id, response_type, user_input, response, contexts = sample
+            score_record: dict[str, Any] = {
+                "schema_version": EVALUATION_SCHEMA_VERSION,
+                "id": sample_id,
+                "response_type": response_type,
+                "metrics": {},
+                "errors": {},
+                "skipped": {},
+            }
             for metric_name, metric in metrics.items():
                 progress.set_postfix(
-                    sample=f"{sample_number}/{len(samples)}",
+                    sample=f"{sample_number}/{len(validated_samples)}",
                     question=sample_id,
                     metric=metric_name,
                 )
@@ -227,6 +332,7 @@ def score_dataset(
                         score_record["metrics"][metric_name] = None
                         score_record["skipped"][metric_name] = "No retrieved contexts"
                         skipped[metric_name] += 1
+                        skipped_by_response_type[response_type][metric_name] += 1
                         continue
                     kwargs = {"user_input": user_input, "response": response}
                     if metric_name in {"faithfulness", "context_utilization"}:
@@ -237,10 +343,12 @@ def score_dataset(
                         raise ValueError(f"Metric returned a non-finite score: {value}")
                     score_record["metrics"][metric_name] = value
                     values[metric_name].append(value)
+                    values_by_response_type[response_type][metric_name].append(value)
                 except Exception as error:
                     score_record["metrics"][metric_name] = None
                     score_record["errors"][metric_name] = {"type": type(error).__name__, "message": str(error)}
                     errors[metric_name] += 1
+                    errors_by_response_type[response_type][metric_name] += 1
                 finally:
                     progress.update()
 
@@ -250,25 +358,35 @@ def score_dataset(
                 )
                 output.flush()
 
-    metric_summary = {
-        name: {
-            "mean": sum(metric_values) / len(metric_values) if metric_values else None,
-            "scored": len(metric_values),
-            "errors": errors[name],
-            "skipped": skipped[name],
-        }
-        for name, metric_values in values.items()
+    metric_summary = _metric_summary(metrics, values, errors, skipped)
+    metrics_by_response_type = {
+        response_type: _metric_summary(
+            metrics,
+            values_by_response_type[response_type],
+            errors_by_response_type[response_type],
+            skipped_by_response_type[response_type],
+        )
+        for response_type in RESPONSE_TYPES
     }
-    summary_path = run_dir / "summary.json"
-    summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.is_file() else {"schema_version": 1}
+    samples_by_response_type = {
+        response_type: sum(sample[1] == response_type for sample in validated_samples)
+        for response_type in RESPONSE_TYPES
+    }
+    available_samples_by_response_type = {
+        response_type: sum(sample[1] == response_type for sample in validated_all_samples)
+        for response_type in RESPONSE_TYPES
+    }
     summary["scoring"] = {
         "completed_at": utc_now(),
-        "samples": len(samples),
+        "samples": len(validated_samples),
         "available_samples": len(all_samples),
+        "samples_by_response_type": samples_by_response_type,
+        "available_samples_by_response_type": available_samples_by_response_type,
         "judge_model": config.judge.model,
         "embedding_model": config.embeddings.model if "answer_relevancy" in metrics else None,
         "embedding_device": embedding_device if "answer_relevancy" in metrics else None,
         "metrics": metric_summary,
+        "metrics_by_response_type": metrics_by_response_type,
     }
     write_json(summary_path, summary)
 
@@ -276,7 +394,7 @@ def score_dataset(
     if run_path.is_file():
         manifest = json.loads(run_path.read_text(encoding="utf-8"))
         status = "scoring_failed" if not total_scored else "scored"
-        if total_scored and len(samples) < len(all_samples):
+        if total_scored and len(validated_samples) < len(all_samples):
             status = "scored_partial"
         manifest.update({"status": status, "scored_at": utc_now()})
         write_json(run_path, manifest)

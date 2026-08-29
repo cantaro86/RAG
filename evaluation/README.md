@@ -29,7 +29,7 @@ uv sync --locked --extra dev --extra evaluation
 Run the repository-only evaluation tests explicitly with:
 
 ```bash
-uv run --extra evaluation pytest -m evaluation tests/test_evaluation.py
+uv run --extra evaluation pytest -m evaluation tests/test_evaluation.py tests/test_excel_export.py
 ```
 
 These tests use mocked models and are intentionally excluded from the CI `cpu` selection.
@@ -89,6 +89,8 @@ Each collection creates a new directory under `evaluation/results/`. Collection 
 
 `scores.jsonl` appears only after scoring starts, and the Slurm workflow creates `evaluation_results.xlsx` after scoring completes. `summary.json` is written after collection finishes and is extended after scoring finishes. Consequently, these files may be absent or incomplete while a job is running or after an abrupt interruption.
 
+All JSON and JSONL artifacts use evaluation schema version 2. The scoring and Excel export commands reject artifacts from other schema versions; recollect and rescore a run rather than mixing artifact versions.
+
 ### `run.json`
 
 This is the run manifest and the first file to inspect. It identifies the run, source questions, application configuration, generator model, Git revision, timestamps, and number of selected questions. The judge model is added when scoring starts. Its `status` records the latest phase transition:
@@ -120,29 +122,31 @@ This is the input dataset for RAGAS. JSONL means that each line is one complete 
 
 | Field | Meaning |
 | --- | --- |
+| `schema_version` | Evaluation artifact schema, currently `2`. |
 | `id` | Stable question ID derived from its source line and a text hash, such as `q0001-abcd1234`. |
+| `response_type` | `rag` for a document-grounded answer produced through `clean_answer`; otherwise `non_rag`. |
 | `user_input` | Original question from `questions.txt`. |
 | `response` | Final answer returned by the production graph. |
 | `retrieved_contexts` | Text of the final accepted documents supplied for scoring. |
 | `trace_path` | Relative path to the corresponding compressed trace. |
 
-Only questions that produce a valid final response and document list become samples. A failed question still has a trace but has no line in `samples.jsonl`. The judge reads this file and does not receive internal graph routing data.
+Only questions that produce a valid final response and document list become samples. Greetings, thanks, off-topic refusals, and `no_generation` fallbacks remain samples with `response_type: non_rag` and empty contexts. A failed question still has a trace but has no line in `samples.jsonl`. The scoring pipeline uses `response_type` for reporting but does not pass internal graph routing data to metric judges.
 
 ### `scores.jsonl`
 
-This file also has one JSON object per line, keyed by the same question `id` used in `samples.jsonl`. Each record contains `metrics`, `errors`, and `skipped` mappings. A successful metric has a numeric value in `metrics`. A failed metric has `null` there and a structured exception in `errors`. Context-dependent metrics are instead recorded in `skipped` when no retrieval context is available. Join samples, scores, and traces by question ID rather than relying on line counts, especially after an interrupted or limited run.
+This file also has one schema-version-2 JSON object per line, keyed by the same question `id` used in `samples.jsonl`. Each record preserves `response_type` and contains `metrics`, `errors`, and `skipped` mappings. A successful metric has a numeric value in `metrics`. A failed metric has `null` there and a structured exception in `errors`. Context-dependent metrics are instead recorded in `skipped` when no retrieval context is available; answer relevancy is still scored for non-RAG responses. Join samples, scores, and traces by question ID rather than relying on line counts, especially after an interrupted or limited run.
 
 Existing scores are never replaced implicitly. Pass `--overwrite` to `score` only when a deliberate rescore is required.
 
 ### `summary.json`
 
-The `collection` section reports selected, completed, and failed question counts; scoreable sample count; successful retrievals; reformulated questions; and total retrieval attempts. After scoring, the `scoring` section adds the number of processed and available samples, model and device information, and a per-metric mean with `scored`, `errors`, and `skipped` counts. Each mean uses only successfully scored values for that metric, so read it together with those counts.
+The `collection` section reports selected, completed, and failed question counts; scoreable sample count; `rag` and `non_rag` sample counts; successful retrievals; reformulated questions; and total retrieval attempts. After scoring, the `scoring` section adds processed and available counts by response type, model and device information, overall `metrics`, and separate `metrics_by_response_type` aggregates. Each mean uses only successfully scored values for that metric, so read it together with its `scored`, `errors`, and `skipped` counts.
 
 ### `traces/<question-id>.json.gz`
 
 There is one gzip-compressed JSON trace for every attempted question, including failed invocations. The trace records every available LangGraph checkpoint in chronological order. `Document` content and metadata are stored once in the top-level `documents` dictionary; checkpoint states and retrieval diagnostics refer to them by stable SHA-256 document IDs. Partial checkpoints are retained when graph invocation fails.
 
-With the current independent-question route, the graph records the raw input, the sanitized question, and at most one `transform_query` rewrite before the second failed retrieval ends the run. The trace format supports additional rewrite iterations if that routing limit changes later.
+With the current independent-question route, `sanitize_question` is followed by `social_intent`. Greetings and thanks terminate through their handlers; content questions continue through `init_first_question` and `domain_guardrail`. Off-topic questions terminate through `handle_off_topic`; accepted questions enter retrieval and either finish through `clean_answer` with documents or `no_generation` without them. The trace records at most one `transform_query` rewrite before the second failed retrieval ends the run.
 
 ## Reading a trace
 
@@ -157,6 +161,10 @@ gzip -cd "$TRACE" | jq '{
   error,
   checkpoint_error,
   node_path: .diagnostics.node_path,
+  social_intent: .diagnostics.social_intent,
+  guardrail_status: .diagnostics.guardrail_status,
+  terminal_node: .diagnostics.terminal_node,
+  next_nodes: .diagnostics.next_nodes,
   question_versions: .diagnostics.question_versions,
   retrieval_attempts: .diagnostics.retrieval_attempts,
   failed_nodes: .diagnostics.failed_nodes
@@ -195,6 +203,8 @@ gzip -cd "$TRACE" | jq '.steps[] | {
   has_docs: .state.has_docs,
   rewrite_count: .state.rewrite_count,
   generation: .state.generation,
+  social_intent: .state.social_intent,
+  guardrail_status: .state.guardrail_status,
   tasks
 }'
 ```
@@ -234,7 +244,7 @@ uv run python -m evaluation export-excel evaluation/results/<run-id> \
   --output evaluation/results/<run-id>/my_report.xlsx
 ```
 
-The command refuses to replace an existing workbook unless `--overwrite` is passed. It does not load the application or judge models, so it is safe to run on a login node. It can also export a partially completed run: attempted questions remain visible, while unavailable responses and metrics are left blank and identified by the status and error columns.
+The command refuses to replace an existing workbook unless `--overwrite` is passed. It does not load the application or judge models, so it is safe to run on a login node. It can also export a partially completed run: attempted questions remain visible, while unavailable responses and metrics are left blank and identified by collection status.
 
 The workbook contains three sheets:
 
@@ -242,9 +252,9 @@ The workbook contains three sheets:
 | --- | --- |
 | `Results` | One row per attempted question, including failed questions that never became RAGAS samples. |
 | `Run Summary` | Flattened `run.json` and `summary.json` metadata, counts, models, and aggregate metric results. |
-| `Legend` | Description of every result column and the mapping from internal guardrail values to readable classifications. |
+| `Legend` | Description of every result column and the mapping from internal graph values to readable route classifications. |
 
-The `Results` sheet joins traces, samples, and scores by stable question ID. Its fields cover the original, sanitized, transformed, and final questions; readable guardrail classification; final response; retrieval counts, sources, reranker scores, and contexts; all three RAGAS metrics; and reasons for skipped metrics. `transformed_question` contains the last `transform_query` result when that node ran.
+The `Results` sheet joins traces, samples, and scores by stable question ID. Its fields cover `response_type`; the original, sanitized, transformed, and final questions; the raw `social_intent` and `guardrail_status` graph outputs; readable route classification; final response; retrieval counts, sources, reranker scores, and contexts; all three RAGAS metrics; and reasons for skipped metrics. Filter `response_type` to inspect RAG and non-RAG rows separately. `transformed_question` contains the last `transform_query` result when that node ran.
 
 Long text is wrapped, the header row is frozen, filters are enabled, classifications and statuses are color-coded, and metric columns use a red-to-green scale. Because Excel limits a cell to 32,767 characters, exceptionally large combined contexts end with an explicit truncation notice.
 
