@@ -20,7 +20,6 @@ index_dir: "./faiss_index"
 
 # Reindex PDFs or not
 reindex: false
-workers: 8
 
 # Move index to GPU if available
 use_gpu_index: false

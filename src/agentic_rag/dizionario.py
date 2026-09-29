@@ -40,7 +40,7 @@ def dedup_preserve_order(items: Iterable[str]) -> list[str]:
 
 def merge_overlapping_groups(groups: list[list[str]]) -> list[list[str]]:
     pending = [dedup_preserve_order(group) for group in groups if group]
-    merged: tuple[tuple[str]] = []
+    merged: list[list[str]] = []
 
     while pending:
         base = pending.pop(0)

@@ -2,7 +2,6 @@
 Unit tests for agentic_rag/build_faiss.py
 
 Covers:
-  - _detect_lang_safe
   - extract_list_number
   - _make_metadata
   - _flush_text
@@ -12,24 +11,33 @@ Covers:
   - Pipeline: chunk_markdown → merge_continuation_lists
 
 Run with:
-    pytest tests/test_indexing.py -v
+    uv run pytest -m cpu tests/test_build_faiss.py
 """
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+import agentic_rag.build_faiss as build_faiss_module
+from agentic_rag._load_env import cfg as runtime_cfg
 from agentic_rag.build_faiss import (
     _SPLITTER,
-    _detect_lang_safe,
     _flush_text,
     _make_metadata,
+    build_embedder,
+    build_faiss_index,
     chunk_markdown,
     extract_list_number,
+    load_vectorstore,
     merge_continuation_lists,
     split_block_by_type,
 )
+from agentic_rag.config_schema import Config
+
+from .helpers import make_valid_config
 
 pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
 
@@ -39,43 +47,6 @@ pytestmark = pytest.mark.cpu  # Mark ALL tests in this module as CPU
 
 MARKDOWN_IT_DIR = Path(__file__).resolve().parent.parent / "Markdown_IT"
 PAZIENTE_MD = MARKDOWN_IT_DIR / "Informazioni_per_pazienti.md"
-
-
-# ===========================================================================
-# _detect_lang_safe
-# ===========================================================================
-
-
-class TestDetectLangSafe:
-    def test_italian_text_detected(self):
-        italian = (
-            "Il paziente deve assumere il farmaco ogni mattina a digiuno "
-            "e seguire le indicazioni del medico curante con la massima attenzione."
-        )
-        assert _detect_lang_safe(italian) == "it"
-
-    def test_english_text_detected(self):
-        english = (
-            "The patient should take the medication every morning on an empty "
-            "stomach and carefully follow all the doctor instructions provided."
-        )
-        assert _detect_lang_safe(english) == "en"
-
-    def test_short_text_returns_unknown(self):
-        # Fewer than 120 chars → length guard triggers, returns "unknown"
-        assert _detect_lang_safe("Ciao come stai") == "unknown"
-
-    def test_empty_string_returns_unknown(self):
-        assert _detect_lang_safe("") == "unknown"
-
-    def test_none_returns_unknown(self):
-        assert _detect_lang_safe(None) == "unknown"  # type: ignore[arg-type]
-
-    def test_exactly_at_threshold_attempts_detection(self):
-        # 120 chars: satisfies the >= 120 guard; result must be a string
-        text = "parola " * 20  # 140 chars of plausible Italian-ish tokens
-        result = _detect_lang_safe(text)
-        assert isinstance(result, str)
 
 
 # ===========================================================================
@@ -98,16 +69,20 @@ class TestExtractListNumber:
         ],
     )
     def test_parametrized(self, line, expected):
+        """Verify parametrized."""
         assert extract_list_number(line) == expected
 
     def test_continuation_item_detected(self):
+        """Verify continuation item detected."""
         assert extract_list_number("4. Quarto passo: verificare i dati inseriti.") == 4
 
     def test_double_digit_detected(self):
+        """Verify double digit detected."""
         assert extract_list_number("12. Dodicesimo elemento della lista.") == 12
 
     def test_item_1_detected(self):
         # Item 1 is valid but NOT a continuation (n <= 1 in merge logic)
+        """Verify item 1 detected."""
         assert extract_list_number("1. Primo elemento.") == 1
 
 
@@ -118,20 +93,24 @@ class TestExtractListNumber:
 
 class TestMakeMetadata:
     def test_required_keys_present(self):
+        """Verify required keys present."""
         meta = _make_metadata("doc.md", "Introduzione", "it")
         assert meta["source"] == "doc.md"
         assert meta["section"] == "Introduzione"
         assert meta["language"] == "it"
 
     def test_extra_kwargs_included(self):
+        """Verify extra kwargs included."""
         meta = _make_metadata("doc.md", "Sezione", "it", type="table", page=3)
         assert meta["type"] == "table"
         assert meta["page"] == 3
 
     def test_returns_dict(self):
+        """Verify returns dict."""
         assert isinstance(_make_metadata("x.md", "s", "en"), dict)
 
     def test_no_extra_keys_when_none_given(self):
+        """Verify no extra keys when none given."""
         meta = _make_metadata("a.md", "B", "fr")
         assert set(meta.keys()) == {"source", "section", "language"}
 
@@ -160,6 +139,7 @@ class TestFlushText:
         return chunks, new_heading
 
     def test_flushes_pending_text(self):
+        """Verify flushes pending text."""
         pending = ["Prima frase di testo.", "Seconda frase di testo."]
         chunks, heading = self._call(pending)
         assert len(chunks) >= 1
@@ -167,6 +147,7 @@ class TestFlushText:
         assert pending == []  # list must be cleared in place
 
     def test_carried_heading_prepended_to_text(self):
+        """Verify carried heading prepended to text."""
         pending = ["Testo della sezione."]
         chunks, _ = self._call(pending, carried_heading="## Sezione di test")
         full = " ".join(c.page_content for c in chunks)
@@ -174,17 +155,20 @@ class TestFlushText:
         assert "Testo della sezione." in full
 
     def test_only_heading_no_text_creates_one_chunk(self):
+        """Verify only heading no text creates one chunk."""
         chunks, heading = self._call([], carried_heading="## Solo titolo")
         assert len(chunks) == 1
         assert chunks[0].page_content == "## Solo titolo"
         assert heading == ""
 
     def test_nothing_to_flush_passthrough(self):
+        """Verify nothing to flush passthrough."""
         chunks, heading = self._call([], carried_heading="")
         assert chunks == []
         assert heading == ""
 
     def test_chunk_metadata_correct(self):
+        """Verify chunk metadata correct."""
         pending = ["Frase di prova per il test di metadata."]
         chunks, _ = self._call(pending)
         m = chunks[0].metadata
@@ -194,7 +178,8 @@ class TestFlushText:
         assert m["type"] == "text"
 
     def test_long_text_is_split_into_multiple_chunks(self):
-        # Text larger than chunk_size (1500) should produce more than one chunk
+        # Text larger than the configured chunk size should produce more than one chunk.
+        """Verify long text is split into multiple chunks."""
         long_text = ("Testo di prova molto lungo. " * 100).strip()
         pending = [long_text]
         chunks, _ = self._call(pending)
@@ -210,21 +195,25 @@ class TestFlushText:
 
 class TestSplitBlockByType:
     def test_pure_text_block(self):
+        """Verify pure text block."""
         block = "Questo è un testo normale senza liste.\nNessuna lista né tabella presente."
         segs = split_block_by_type(block)
         assert all(t == "text" for t, _ in segs)
 
     def test_bulleted_list_detected(self):
+        """Verify bulleted list detected."""
         block = "- Prima voce elenco\n- Seconda voce\n- Terza voce"
         segs = split_block_by_type(block)
         assert any(t == "list" for t, _ in segs)
 
     def test_numbered_list_detected(self):
+        """Verify numbered list detected."""
         block = "1. Passo uno\n2. Passo due\n3. Passo tre"
         segs = split_block_by_type(block)
         assert any(t == "list" for t, _ in segs)
 
     def test_heading_line_detected(self):
+        """Verify heading line detected."""
         block = "## Sezione importante\nTesto immediatamente successivo."
         segs = split_block_by_type(block)
         assert any(t == "heading" for t, _ in segs)
@@ -240,16 +229,19 @@ class TestSplitBlockByType:
         )
 
     def test_returns_list_of_two_element_tuples(self):
+        """Verify returns list of two element tuples."""
         segs = split_block_by_type("semplice testo")
         assert isinstance(segs, list)  # [('text', 'semplice testo')]
         assert all(isinstance(s, tuple) and len(s) == 2 for s in segs)
 
     def test_table_lines_not_classified_as_list(self):
+        """Verify table lines not classified as list."""
         block = "| Col1 | Col2 |\n|------|------|\n| A    | B    |"
         segs = split_block_by_type(block)
         assert all(t != "list" for t, _ in segs)
 
     def test_mixed_block_has_multiple_segment_types(self):
+        """Verify mixed block has multiple segment types."""
         block = "Testo introduttivo.\n1. Primo elemento\n2. Secondo elemento"
         segs = split_block_by_type(block)
         types = {t for t, _ in segs}
@@ -262,40 +254,54 @@ class TestSplitBlockByType:
 
 
 class TestChunkMarkdown:
+    def test_default_splitter_uses_runtime_config(self):
+        """Verify default splitter uses runtime config."""
+        assert _SPLITTER._chunk_size == runtime_cfg.chunk_size
+        assert _SPLITTER._chunk_overlap == runtime_cfg.chunk_overlap
+
     def test_returns_list_of_documents(self, simple_md):
+        """Verify returns list of documents."""
         assert all(isinstance(c, Document) for c in chunk_markdown(simple_md))
 
     def test_produces_at_least_one_chunk(self, simple_md):
+        """Verify produces at least one chunk."""
         assert len(chunk_markdown(simple_md)) == 7, f"Expected exactly 7 chunks, got {len(chunk_markdown(simple_md))}"
 
     def test_source_metadata_matches_filename(self, simple_md):
+        """Verify source metadata matches filename."""
         for c in chunk_markdown(simple_md):
             assert c.metadata["source"] == simple_md.name
 
     def test_all_required_metadata_keys_present(self, simple_md):
+        """Verify all required metadata keys present."""
         required = {"source", "section", "language", "type"}
         for c in chunk_markdown(simple_md):
             assert required <= set(c.metadata.keys())
 
     def test_page_content_never_blank(self, simple_md):
+        """Verify page content never blank."""
         for c in chunk_markdown(simple_md):
             assert c.page_content.strip() != ""
 
     def test_language_metadata_is_string(self, simple_md):
+        """Verify language metadata is string."""
         for c in chunk_markdown(simple_md):
             assert isinstance(c.metadata["language"], str)
 
     def test_empty_file_returns_empty_list(self, tmp_path):
+        """Verify empty file returns empty list."""
         empty = tmp_path / "empty.md"
         empty.write_text("", encoding="utf-8")
         assert chunk_markdown(empty) == []
 
     def test_heading_only_file_single_chunk(self, tmp_path):
+        """Verify heading only file single chunk."""
         md = tmp_path / "heading_only.md"
         md.write_text("# Solo un titolo\n", encoding="utf-8")
         assert len(chunk_markdown(md)) == 1
 
     def test_table_chunk_present_with_pipe(self, simple_md):
+        """Verify table chunk present with pipe."""
         chunks = chunk_markdown(simple_md)
         table_chunks = [c for c in chunks if c.metadata.get("type") == "table"]
         assert table_chunks
@@ -304,9 +310,211 @@ class TestChunkMarkdown:
             assert "|" in c.page_content
 
     def test_known_chunk_types_only(self, simple_md):
+        """Verify known chunk types only."""
         allowed = {"text", "list", "table", "recomm"}
         for c in chunk_markdown(simple_md):
             assert c.metadata.get("type") in allowed, f"Unexpected chunk type: {c.metadata.get('type')!r}"
+
+    def test_injected_splitter_controls_prose_size_and_overlap(self, tmp_path):
+        """Verify injected splitter controls prose size and overlap."""
+        md = tmp_path / "prose.md"
+        md.write_text("# Introduzione\n\n" + "abcdefghij" * 40, encoding="utf-8")
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=48,
+            chunk_overlap=8,
+            separators=[""],
+        )
+
+        chunks = [c for c in chunk_markdown(md, splitter=splitter) if c.metadata["type"] == "text"]
+
+        assert len(chunks) > 1
+        assert all(len(c.page_content) <= 48 for c in chunks)
+        assert any(
+            left.page_content[-8:] == right.page_content[:8] for left, right in zip(chunks, chunks[1:], strict=False)
+        )
+
+
+def test_build_faiss_uses_configured_splitter_and_online_mode(tmp_path, monkeypatch):
+    """Verify build faiss uses configured splitter and online mode."""
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "doc.md").write_text("# Titolo\n\nTesto sufficientemente lungo.", encoding="utf-8")
+
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 77,
+            "chunk_overlap": 13,
+            "min_chunk_length": 1,
+            "online": False,
+        }
+    )
+    cfg = Config.model_validate(data)
+    captured = {}
+
+    def fake_chunk_markdown(md_path, splitter):
+        captured["path"] = md_path
+        captured["chunk_size"] = splitter._chunk_size
+        captured["chunk_overlap"] = splitter._chunk_overlap
+        return [Document(page_content="contenuto indicizzabile", metadata={"type": "text"})]
+
+    embedder = object()
+    embedder_builder = MagicMock(return_value=embedder)
+    vectorstore = MagicMock()
+    from_documents = MagicMock(return_value=vectorstore)
+    monkeypatch.setattr(build_faiss_module, "chunk_markdown", fake_chunk_markdown)
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    build_faiss_index(cfg)
+
+    assert captured == {
+        "path": md_dir / "doc.md",
+        "chunk_size": 77,
+        "chunk_overlap": 13,
+    }
+    embedder_builder.assert_called_once_with(
+        cfg.embed_model,
+        online=False,
+        cache_folder=build_faiss_module.hf_hub_cache_for(cfg.hf_home),
+    )
+    from_documents.assert_called_once()
+    vectorstore.save_local.assert_called_once_with(cfg.index_dir)
+
+
+@pytest.mark.parametrize("online, effective_online", [(True, True), (True, False), (False, False)])
+def test_build_embedder_uses_effective_online_policy(monkeypatch, online, effective_online):
+    """Verify build embedder uses effective online policy."""
+    embeddings = MagicMock()
+    policy = MagicMock(return_value=effective_online)
+    monkeypatch.setattr(build_faiss_module, "hf_online_enabled", policy)
+    monkeypatch.setattr(build_faiss_module, "HuggingFaceEmbeddings", embeddings)
+
+    build_embedder("embed-model", online=online, cache_folder="/configured/cache")
+
+    policy.assert_called_once_with(online)
+    model_kwargs = embeddings.call_args.kwargs["model_kwargs"]
+    assert model_kwargs["local_files_only"] is not effective_online
+    assert model_kwargs["model_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert model_kwargs["processor_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert model_kwargs["config_kwargs"] == {"cache_dir": "/configured/cache"}
+    assert "cache_folder" not in embeddings.call_args.kwargs
+
+
+def test_load_vectorstore_uses_explicit_gpu_flag(monkeypatch):
+    """Verify load vectorstore uses explicit gpu flag."""
+    embedder = object()
+    vectorstore = MagicMock()
+    embedder_builder = MagicMock(return_value=embedder)
+    load_local = MagicMock(return_value=vectorstore)
+    gpu_count = MagicMock(return_value=1)
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "load_local", load_local)
+    monkeypatch.setattr(build_faiss_module.faiss, "get_num_gpus", gpu_count)
+
+    result = load_vectorstore(
+        "index",
+        "embed-model",
+        online=False,
+        use_gpu_index=False,
+        cache_folder="/configured/cache",
+    )
+
+    assert result is vectorstore
+    embedder_builder.assert_called_once_with(
+        "embed-model",
+        online=False,
+        cache_folder="/configured/cache",
+    )
+    load_local.assert_called_once_with("index", embedder, allow_dangerous_deserialization=True)
+    gpu_count.assert_not_called()
+
+
+def test_load_vectorstore_supports_metal_resources_without_temp_memory(monkeypatch):
+    """Verify load vectorstore supports metal resources without temp memory."""
+    vectorstore = MagicMock()
+    vectorstore.index = "cpu-index"
+    resource = object()
+    monkeypatch.setattr(build_faiss_module, "build_embedder", MagicMock(return_value=object()))
+    monkeypatch.setattr(build_faiss_module.FAISS, "load_local", MagicMock(return_value=vectorstore))
+    monkeypatch.setattr(build_faiss_module.faiss, "get_num_gpus", MagicMock(return_value=1))
+    monkeypatch.setattr(
+        build_faiss_module.faiss,
+        "StandardGpuResources",
+        MagicMock(return_value=resource),
+        raising=False,
+    )
+    move = MagicMock(return_value="accelerated-index")
+    monkeypatch.setattr(build_faiss_module.faiss, "index_cpu_to_gpu", move, raising=False)
+
+    result = load_vectorstore(
+        "index",
+        "embed-model",
+        online=False,
+        use_gpu_index=True,
+        cache_folder="/configured/cache",
+    )
+
+    assert result.index == "accelerated-index"
+    move.assert_called_once_with(resource, 0, "cpu-index")
+
+
+def test_build_faiss_fails_before_model_loading_when_no_chunks_remain(tmp_path, monkeypatch):
+    """Verify build faiss fails before model loading when no chunks remain."""
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "short.md").write_text("# Tiny\n", encoding="utf-8")
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "min_chunk_length": 20,
+        }
+    )
+    cfg = Config.model_validate(data)
+    embedder_builder = MagicMock()
+    from_documents = MagicMock()
+    monkeypatch.setattr(build_faiss_module, "build_embedder", embedder_builder)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    with pytest.raises(ValueError, match=r"No chunks remain.*min_chunk_length=20"):
+        build_faiss_index(cfg)
+
+    embedder_builder.assert_not_called()
+    from_documents.assert_not_called()
+
+
+def test_min_chunk_length_is_inclusive(tmp_path, monkeypatch):
+    """Verify min chunk length is inclusive."""
+    md_dir = tmp_path / "markdown"
+    md_dir.mkdir()
+    (md_dir / "exact.md").write_text("# Exact", encoding="utf-8")
+    data = make_valid_config()
+    data.update(
+        {
+            "md_dir": str(md_dir),
+            "index_dir": str(tmp_path / "index"),
+            "chunk_size": 100,
+            "chunk_overlap": 10,
+            "min_chunk_length": 20,
+        }
+    )
+    cfg = Config.model_validate(data)
+    exact_chunk = Document(page_content="x" * 20, metadata={"type": "text"})
+    monkeypatch.setattr(build_faiss_module, "chunk_markdown", lambda *_args, **_kwargs: [exact_chunk])
+    monkeypatch.setattr(build_faiss_module, "build_embedder", MagicMock(return_value=object()))
+    vectorstore = MagicMock()
+    from_documents = MagicMock(return_value=vectorstore)
+    monkeypatch.setattr(build_faiss_module.FAISS, "from_documents", from_documents)
+
+    build_faiss_index(cfg)
+
+    assert from_documents.call_args.args[0] == [exact_chunk]
 
 
 # ===========================================================================
@@ -316,6 +524,7 @@ class TestChunkMarkdown:
 
 class TestSkipSections:
     def test_all_skipped_sections_absent_from_chunks(self, simple_md):
+        """Verify all skipped sections absent from chunks."""
         chunks = chunk_markdown(simple_md)
         for c in chunks:
             sec = c.metadata.get("section", "").lower()
@@ -323,6 +532,7 @@ class TestSkipSections:
                 assert keyword not in sec, f"Skipped section leaked into chunks: section={sec!r}"
 
     def test_skipped_content_absent_from_page_content(self, simple_md):
+        """Verify skipped content absent from page content."""
         chunks = chunk_markdown(simple_md)
         all_text = " ".join(c.page_content for c in chunks)
         assert "Smith J." not in all_text, "Riferimenti content leaked"
@@ -344,6 +554,7 @@ class TestNosplitSections:
         assert len(rec) == 2, f"Expected 2 chunks for Raccomandazioni, got {len(rec)}"
 
     def test_raccomandazioni_type_is_recomm(self, simple_md):
+        """Verify raccomandazioni type is recomm."""
         chunks = chunk_markdown(simple_md)
         rec = [c for c in chunks if "raccomandazion" in c.metadata.get("section", "").lower()]
         for c in rec:
@@ -371,6 +582,7 @@ class TestNosplitSections:
         assert "Per ulteriori informazioni" in second.page_content
 
     def test_nosplit_section_source_metadata(self, simple_md):
+        """Verify nosplit section source metadata."""
         chunks = chunk_markdown(simple_md)
         rec = [c for c in chunks if "raccomandazion" in c.metadata.get("section", "").lower()]
         for c in rec:
@@ -399,16 +611,19 @@ class TestListaDiIstruzioni:
         return [c for c in chunks if c.metadata.get("section", "").lower() == "lista di istruzioni"]
 
     def test_produces_exactly_three_chunks(self, lista_chunks):
+        """Verify produces exactly three chunks."""
         assert len(lista_chunks) == 3, (
             f"Expected 3 chunks for 'Lista di istruzioni', got {len(lista_chunks)}:\n"
             + "\n".join(f"  [{c.metadata.get('type')}] {c.page_content[:80]!r}" for c in lista_chunks)
         )
 
     def test_chunk_type_sequence_is_list_text_list(self, lista_chunks):
+        """Verify chunk type sequence is list text list."""
         types = [c.metadata.get("type") for c in lista_chunks]
         assert types == ["list", "text", "list"], f"Expected ['list', 'text', 'list'], got {types}"
 
     def test_first_chunk_is_numbered_list(self, lista_chunks):
+        """Verify first chunk is numbered list."""
         first = lista_chunks[0]
         assert first.metadata["type"] == "list"
         assert "1." in first.page_content
@@ -419,6 +634,7 @@ class TestListaDiIstruzioni:
         assert "Contattare il medico" in first.page_content
 
     def test_second_chunk_is_text(self, lista_chunks):
+        """Verify second chunk is text."""
         middle = lista_chunks[1]
         assert middle.metadata["type"] == "text"
         assert "effetti collaterali" in middle.page_content
@@ -427,16 +643,19 @@ class TestListaDiIstruzioni:
         assert "Assumere" not in middle.page_content
 
     def test_third_chunk_is_bullet_list(self, lista_chunks):
+        """Verify third chunk is bullet list."""
         third = lista_chunks[2]
         assert third.metadata["type"] == "list"
         assert "Monitorare" in third.page_content
         assert "Annotare" in third.page_content
 
     def test_all_chunks_have_correct_section_metadata(self, lista_chunks):
+        """Verify all chunks have correct section metadata."""
         for c in lista_chunks:
             assert c.metadata["section"] == "Lista di istruzioni"
 
     def test_all_chunks_have_correct_source(self, simple_md, lista_chunks):
+        """Verify all chunks have correct source."""
         for c in lista_chunks:
             assert c.metadata["source"] == simple_md.name
 
@@ -469,29 +688,36 @@ class TestListaDiIstruzioni:
 )
 class TestChunkMarkdownRealDocument:
     @pytest.fixture(scope="class")
-    def chunks(self):
+    @classmethod
+    def chunks(cls):
         return chunk_markdown(PAZIENTE_MD)
 
     def test_produces_chunks(self, chunks):
+        """Verify produces chunks."""
         assert len(chunks) > 0
 
     def test_language_detected_as_italian(self, chunks):
+        """Verify language detected as italian."""
         languages = {c.metadata["language"] for c in chunks}
         assert "it" in languages
 
     def test_source_is_correct_filename(self, chunks):
+        """Verify source is correct filename."""
         for c in chunks:
             assert c.metadata["source"] == PAZIENTE_MD.name
 
     def test_section_metadata_populated(self, chunks):
+        """Verify section metadata populated."""
         assert any(c.metadata.get("section") for c in chunks)
 
     def test_all_required_metadata_keys(self, chunks):
+        """Verify all required metadata keys."""
         required = {"source", "section", "language", "type"}
         for c in chunks:
             assert required <= set(c.metadata.keys())
 
     def test_no_text_chunk_exceeds_3000_chars(self, chunks):
+        """Verify no text chunk exceeds 3000 chars."""
         oversized = [c for c in chunks if c.metadata.get("type") == "text" and len(c.page_content) > 3000]
         assert not oversized, (
             f"{len(oversized)} text chunks exceed 3000 chars (sizes: {[len(c.page_content) for c in oversized[:5]]})"
@@ -512,11 +738,13 @@ class TestChunkMarkdownRealDocument:
             )
 
     def test_table_chunks_contain_pipe(self, chunks):
+        """Verify table chunks contain pipe."""
         for c in chunks:
             if c.metadata.get("type") == "table":
                 assert "|" in c.page_content
 
     def test_known_chunk_types_only(self, chunks):
+        """Verify known chunk types only."""
         allowed = {"text", "list", "table", "recomm"}
         for c in chunks:
             assert c.metadata.get("type") in allowed, f"Unexpected chunk type: {c.metadata.get('type')!r}"
@@ -533,6 +761,7 @@ class TestMergeContinuationLists:
         return Document(page_content=content, metadata={"source": source, "type": type_})
 
     def test_merges_sequential_continuation(self):
+        """Verify merges sequential continuation."""
         chunks = [
             self._doc("1. Primo\n2. Secondo\n3. Terzo"),
             self._doc("4. Quarto\n5. Quinto"),
@@ -543,6 +772,7 @@ class TestMergeContinuationLists:
         assert "4. Quarto" in result[0].page_content
 
     def test_no_merge_different_source(self):
+        """Verify no merge different source."""
         chunks = [
             self._doc("1. Uno\n2. Due\n3. Tre", source="a.md"),
             self._doc("4. Quattro", source="b.md"),
@@ -550,6 +780,7 @@ class TestMergeContinuationLists:
         assert len(merge_continuation_lists(chunks)) == 2
 
     def test_no_merge_gap_in_numbering(self):
+        """Verify no merge gap in numbering."""
         chunks = [
             self._doc("1. Uno\n2. Due\n3. Tre"),
             self._doc("5. Cinque"),
@@ -572,6 +803,7 @@ class TestMergeContinuationLists:
         assert len(result) == 2, "recomm chunks must not be merged even if they look like continuations"
 
     def test_non_list_chunks_unchanged(self):
+        """Verify non list chunks unchanged."""
         chunks = [
             Document(page_content="Testo libero.", metadata={"source": "a.md", "type": "text"}),
             self._doc("1. Solo voce"),
@@ -581,9 +813,11 @@ class TestMergeContinuationLists:
         assert result[0].page_content == "Testo libero."
 
     def test_empty_input_returns_empty(self):
+        """Verify empty input returns empty."""
         assert merge_continuation_lists([]) == []
 
     def test_single_chunk_unchanged(self):
+        """Verify single chunk unchanged."""
         single = [self._doc("1. Solo elemento della lista")]
         assert len(merge_continuation_lists(single)) == 1
 
@@ -627,6 +861,7 @@ class TestMergeContinuationLists:
         assert noise.page_content == "Testo intermedio non list"
 
     def test_preserves_predecessor_metadata(self):
+        """Verify preserves predecessor metadata."""
         chunks = [
             self._doc("1. Primo\n2. Secondo"),
             self._doc("3. Terzo"),
@@ -636,6 +871,7 @@ class TestMergeContinuationLists:
         assert result[0].metadata["type"] == "list"
 
     def test_starting_at_one_is_not_continuation(self):
+        """Verify starting at one is not continuation."""
         chunks = [
             self._doc("1. Alpha\n2. Beta\n3. Gamma"),
             self._doc("1. Nuova lista separata"),
@@ -650,6 +886,7 @@ class TestMergeContinuationLists:
 
 class TestPipeline:
     def test_all_list_items_reachable_after_merge(self, list_continuation_md):
+        """Verify all list items reachable after merge."""
         raw = chunk_markdown(list_continuation_md)
         merged = merge_continuation_lists(raw)
         all_list_text = " ".join(c.page_content for c in merged if c.metadata.get("type") == "list")
@@ -657,6 +894,7 @@ class TestPipeline:
             assert str(i) in all_list_text, f"List item {i} missing after pipeline"
 
     def test_merge_reduces_list_chunk_count(self, list_continuation_md):
+        """Verify merge reduces list chunk count."""
         raw = chunk_markdown(list_continuation_md)
         merged = merge_continuation_lists(raw)
         raw_list = sum(1 for c in raw if c.metadata.get("type") == "list")
@@ -665,6 +903,7 @@ class TestPipeline:
             assert merged_list < raw_list
 
     def test_non_list_chunk_count_unchanged(self, list_continuation_md):
+        """Verify non list chunk count unchanged."""
         raw = chunk_markdown(list_continuation_md)
         merged = merge_continuation_lists(raw)
         assert sum(1 for c in raw if c.metadata.get("type") != "list") == sum(
@@ -682,6 +921,7 @@ class TestPipeline:
             assert r.page_content == m.page_content
 
     def test_simple_md_full_pipeline(self, simple_md):
+        """Verify simple md full pipeline."""
         raw = chunk_markdown(simple_md)
         merged = merge_continuation_lists(raw)
         assert len(merged) > 0

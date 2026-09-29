@@ -13,16 +13,19 @@ dependencies = [
     "build",
     "faiss-cpu",
     "fasttext",
+    "filelock",
     "gradio",
     "langchain==1.2.10",
     "langchain_community==0.4.1",
-    "langchain_core==1.2.13",
+    "langchain_core==1.5.6",
     "langchain_huggingface==1.2.0",
     "langchain_text_splitters==1.1.0",
     "langdetect",
     "langgraph==1.0.8",
     "numpy>=2.4.0",
     "openpyxl",
+    "pandas",
+    "python-dotenv",
     "pyyaml",
     "rich",
     "sacremoses",
@@ -44,7 +47,14 @@ dev = [
     "pytest",
     "jupyter",
     "debugpy",
-    "pynvml",
+    "nvidia-ml-py; sys_platform == 'linux'",
+    "psutil",
+]
+markdown = [
+    "docling",
+]
+evaluation = [
+    "ragas @ git+https://github.com/sanyaden/ragas.git@96285f250a306504201f036022862f335837b372",
 ]
 
 [dependency-groups]
@@ -55,7 +65,8 @@ dev = [
   "pytest",
   "jupyter",
   "debugpy",
-  "pynvml",
+  "nvidia-ml-py; sys_platform == 'linux'",
+  "psutil",
 ]
 
 
@@ -90,7 +101,7 @@ environments = [
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 extend-exclude = ["spack-repo/packages/py-agentic-rag/package.py"]
 
 [tool.ruff.lint]
@@ -110,4 +121,15 @@ addopts = "-v --tb=short"
 markers = [
     "cpu: tests that run on CPU only",
     "gpu: tests that require GPU",
+    "evaluation: repository-only evaluation tooling tests excluded from CI",
 ]
+
+
+[tool.coverage.run]
+branch = true
+source = ["agentic_rag"]
+omit = ["*/agentic_rag/_version.py"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true

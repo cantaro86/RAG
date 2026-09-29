@@ -1,0 +1,9 @@
+# Cross-platform bootstrap for Linux x86_64 and macOS 14+ ARM64.
+# Conda installs Python and uv; `uv sync --locked --extra dev` installs the project environment.
+name: RAG
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.14
+  - uv>=0.11.31

@@ -2,6 +2,7 @@ __pycache__
 .gradio
 .byaldi
 .ruff_cache
+.coverage*
 .env
 
 readme_ollama.md
@@ -22,6 +23,7 @@ Markdown_temp
 Output
 docs
 faiss_index
+performance_faiss_index
 notebooks_RAG
 temp_images
 notebooks
@@ -39,3 +41,5 @@ basic_app.py
 demo_rag.py
 demo_rag2.py
 demo_rag3.py
+
+evaluation/results/

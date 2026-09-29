@@ -1,36 +1,124 @@
+import importlib
 import os
-import string
-import urllib
+import re
+import tempfile
+import threading
+import urllib.request
+from itertools import pairwise
+from pathlib import Path
+from typing import Any
 
-import fasttext
-from langdetect import detect_langs
+from filelock import FileLock
+from langdetect import DetectorFactory, detect_langs
 
+from agentic_rag._load_env import EFFECTIVE_HF_HOME, PROJECT_ROOT, hf_online_enabled
 from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 
+# langdetect otherwise varies probabilities between processes for short text.
+DetectorFactory.seed = 0
 
-def get_fasttext_model():
-    model_path = "lid.176.ftz"
-    if not os.path.exists(model_path):
-        logger.info("🔽 Downloading FastText language identification model (lid.176.ftz)...")
-        url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
-        urllib.request.urlretrieve(url, model_path)
-        logger.info("✅ Download complete.")
-    return fasttext.load_model(model_path)
+FASTTEXT_MODEL_NAME = "lid.176.ftz"
+FASTTEXT_MODEL_URL = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
+FASTTEXT_CACHE_PATH = Path(EFFECTIVE_HF_HOME) / "fasttext" / FASTTEXT_MODEL_NAME
+LEGACY_FASTTEXT_PATH = PROJECT_ROOT / FASTTEXT_MODEL_NAME
 
-
-try:
-    _FASTTEXT_AVAILABLE = True
-    _FASTTEXT_MODEL = get_fasttext_model()
-except Exception as e:
-    logger.warning(f"⚠️ FastText model not available ({e}), using fallback detector.")
-    _FASTTEXT_AVAILABLE = False
-
-logger.info(f"_FASTTEXT_AVAILABLE: {_FASTTEXT_AVAILABLE}")
+_FASTTEXT_MODEL: Any | None = None
+_FASTTEXT_AVAILABLE: bool | None = None
+_FASTTEXT_LOCK = threading.Lock()
+_FASTTEXT_PROCESS_LOCK_TIMEOUT = 120
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
-# -------------------------
+def _fasttext_candidates() -> tuple[Path, ...]:
+    candidates = []
+    for path in (FASTTEXT_CACHE_PATH, LEGACY_FASTTEXT_PATH):
+        if path.is_file() and path not in candidates:
+            candidates.append(path)
+    return tuple(candidates)
+
+
+def _load_usable_candidate(fasttext, candidates: tuple[Path, ...]):
+    last_error = None
+    for model_path in candidates:
+        try:
+            return fasttext.load_model(str(model_path)), model_path, None
+        except Exception as exc:
+            last_error = exc
+            logger.warning("Ignoring unusable FastText model at %s: %s", model_path, exc)
+    return None, None, last_error
+
+
+def _download_fasttext_model(target: Path, fasttext):
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
+    os.close(fd)
+    temporary_path = Path(temporary_name)
+
+    try:
+        logger.info("Downloading FastText language identification model to %s", target)
+        urllib.request.urlretrieve(FASTTEXT_MODEL_URL, temporary_path)
+        if temporary_path.stat().st_size == 0:
+            raise OSError("Downloaded FastText model is empty")
+        model = fasttext.load_model(str(temporary_path))
+        os.replace(temporary_path, target)
+        logger.info("FastText model download complete")
+        return model
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def get_fasttext_model(*, online: bool | None = None):
+    """Load the FastText model once, downloading it only in effective online mode."""
+    global _FASTTEXT_AVAILABLE, _FASTTEXT_MODEL
+
+    if _FASTTEXT_MODEL is not None:
+        return _FASTTEXT_MODEL
+
+    effective_online = hf_online_enabled(True if online is None else online)
+
+    with _FASTTEXT_LOCK:
+        if _FASTTEXT_MODEL is not None:
+            return _FASTTEXT_MODEL
+
+        candidates = _fasttext_candidates()
+        fasttext = importlib.import_module("fasttext") if candidates or effective_online else None
+        if candidates:
+            model, model_path, last_error = _load_usable_candidate(fasttext, candidates)
+            if model is not None:
+                _FASTTEXT_MODEL = model
+                _FASTTEXT_AVAILABLE = True
+                logger.info("FastText language model loaded from %s", model_path)
+                return _FASTTEXT_MODEL
+        else:
+            last_error = None
+
+        if not effective_online:
+            _FASTTEXT_AVAILABLE = False
+            if last_error is not None:
+                raise RuntimeError("No usable cached FastText language model is available") from last_error
+            raise FileNotFoundError(f"FastText model is not cached at {FASTTEXT_CACHE_PATH} and runtime is offline")
+
+        FASTTEXT_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = FASTTEXT_CACHE_PATH.with_name(f"{FASTTEXT_CACHE_PATH.name}.lock")
+        with FileLock(lock_path, timeout=_FASTTEXT_PROCESS_LOCK_TIMEOUT):
+            model, model_path, _last_error = _load_usable_candidate(fasttext, _fasttext_candidates())
+            if model is not None:
+                _FASTTEXT_MODEL = model
+                _FASTTEXT_AVAILABLE = True
+                logger.info("FastText language model loaded from %s", model_path)
+                return _FASTTEXT_MODEL
+
+            try:
+                _FASTTEXT_MODEL = _download_fasttext_model(FASTTEXT_CACHE_PATH, fasttext)
+            except Exception as exc:
+                _FASTTEXT_AVAILABLE = False
+                logger.warning("FastText model download or validation failed: %s", exc)
+                raise
+            _FASTTEXT_AVAILABLE = True
+            logger.info("FastText language model loaded from %s", FASTTEXT_CACHE_PATH)
+            return _FASTTEXT_MODEL
 
 
 class DetectLanguage:
@@ -38,93 +126,128 @@ class DetectLanguage:
 
     MED_PREFIX = "[medical context] "
 
-    ITALIAN_WORLDS = {
-        "ciao",
-        "salve",
-        "arrivederci",
-        "grazie",
-        "addio",
-        "il",
-        "la",
-        "lo",
-        "gli",
-        "le",
-        "di",
-        "dove",
-        "da",
-        "quando",
-        "che",
-        "non",
-        "per",
-        "come",
-        "stai",
-    }
+    ITALIAN_WORDS = frozenset(
+        {
+            "ciao",
+            "salve",
+            "arrivederci",
+            "grazie",
+            "addio",
+            "il",
+            "la",
+            "lo",
+            "gli",
+            "le",
+            "di",
+            "dove",
+            "da",
+            "quando",
+            "che",
+            "non",
+            "per",
+            "come",
+            "stai",
+        }
+    )
+    ITALIAN_STRONG_WORDS = frozenset({"addio", "arrivederci", "ciao", "grazie"})
+    ITALIAN_SHORT_PHRASES = frozenset({("fa", "male")})
+    ENGLISH_GREETING_WORDS = frozenset({"hello", "hi"})
+    ENGLISH_PHRASES = frozenset({("i", "am")})
 
-    def __init__(self, text: str):
+    def __init__(self, text: str, *, online: bool | None = None):
         self.text = text.strip()
-        self.lang = self._detect_language(self.text)
+        if not self.text:
+            raise ValueError("Input text must not be blank.")
 
-        if self.lang not in ("it"):
+        self.online = online
+        self.lang = self._detect_language(self.text)
+        if self.lang != "it":
             raise ValueError(f"Unsupported language '{self.lang}'. Only italian is supported.")
 
-    # -------------------------
-    # 🔍 Detection Methods
-    # -------------------------
-
     def _detect_language(self, text: str) -> str:
-        """Automatically choose best detection method."""
-        if _FASTTEXT_AVAILABLE:
-            lang = self._detect_fasttext(text)
-        else:
-            lang = self._robust_detect(text)
-        return lang
+        """Automatically choose the best available detection method."""
+        foreign_lang = self._foreign_heuristic(text)
+        if foreign_lang:
+            return foreign_lang
+        try:
+            model = get_fasttext_model(online=self.online)
+        except Exception:
+            return self._robust_detect(text)
+        fasttext_lang = self._detect_fasttext(text, model)
+        if fasttext_lang == "it":
+            return fasttext_lang
+        fallback_lang = self._robust_detect(text)
+        return fallback_lang if fallback_lang == "it" else fasttext_lang
 
-    def _detect_simple_heuristic(self, text: str) -> str:
-        """Simple heuristic detection for very short text."""
-        clean_text = "".join(c for c in text.lower() if c not in string.punctuation)
-        if any(c in text.lower() for c in ["è", "é", "ò", "à", "ì", "ù"]) or clean_text in self.ITALIAN_WORLDS:
-            return "it"
+    def _foreign_heuristic(self, text: str) -> str | None:
+        words = tuple(_WORD_RE.findall(text.casefold()))
+        if words and words[0] in self.ENGLISH_GREETING_WORDS:
+            return "en"
+        if any(phrase in self.ENGLISH_PHRASES for phrase in pairwise(words)):
+            return "en"
+        return None
 
-    def _detect_fasttext(self, text: str) -> str:
-        """Use fastText for reliable detection, even on short text."""
+    def _italian_heuristic(self, text: str) -> bool:
+        normalized = text.casefold()
+        words = tuple(_WORD_RE.findall(normalized))
+        return (
+            words in self.ITALIAN_SHORT_PHRASES
+            or any(word in self.ITALIAN_STRONG_WORDS for word in words)
+            or (len(words) == 1 and words[0] in self.ITALIAN_WORDS)
+            or any(character in normalized for character in "èéòàìù")
+        )
 
-        logger.debug("fastText detection")
+    def _detect_simple_heuristic(self, text: str) -> str | None:
+        """Apply token-based rules to very short text."""
+        return "it" if self._italian_heuristic(text) else None
 
-        if not text.strip():
-            return "it"
+    def _detect_fasttext(self, text: str, model=None) -> str:
+        """Use FastText for reliable detection, including short text."""
+        logger.debug("FastText detection")
 
-        # Quick heuristic for short text
-        if len(text.split()) < 2:
+        if len(text.split()) <= 2:
             heuristic_lang = self._detect_simple_heuristic(text)
             if heuristic_lang:
                 return heuristic_lang
 
-        prediction = _FASTTEXT_MODEL.predict(text.replace("\n", " "))
+        model = model or get_fasttext_model(online=getattr(self, "online", None))
+        clean_text = text.replace("\n", " ")
+        if type(model).__module__ == "fasttext.FastText" and hasattr(model, "f"):
+            predictions = model.f.predict(f"{clean_text}\n", 1, 0.0, "strict")
+            if predictions:
+                probabilities, labels = zip(*predictions, strict=False)
+            else:
+                probabilities, labels = (), ()
+            prediction = labels, probabilities
+        else:
+            prediction = model.predict(clean_text)
+        logger.debug("FastText prediction: %s", prediction)
 
-        logger.debug(f"fastText prediction: {prediction}")
-
+        if not prediction[0] or not prediction[1]:
+            return self._robust_detect(text)
         if prediction[1][0] < self.FASTTEXT_CONFIDENCE_THRESHOLD:
             return self._robust_detect(text)
 
         lang = prediction[0][0].replace("__label__", "")
-        return lang.split("_")[0]  # remove regional code, e.g., 'en_uk' -> 'en'
+        return lang.split("_")[0]
 
     def _robust_detect(self, text: str) -> str:
-        """Fallback detection using langdetect + heuristic."""
-
+        """Use langdetect and token-based rules when FastText is unavailable."""
         logger.debug("Robust detection")
 
-        text = text.strip()
-
-        # Quick heuristic for short text
-        if len(text.split()) < 2:
+        foreign_lang = self._foreign_heuristic(text)
+        if foreign_lang:
+            return foreign_lang
+        if len(text.split()) <= 2:
             heuristic_lang = self._detect_simple_heuristic(text)
             if heuristic_lang:
                 return heuristic_lang
 
         try:
             langs = detect_langs(text)
-            best = max(langs, key=lambda x: x.prob)
+            best = max(langs, key=lambda result: result.prob)
+            if best.lang == "it":
+                return best.lang
             if best.prob < 0.8:
                 return self._heuristic_detect(text)
             return best.lang
@@ -132,17 +255,14 @@ class DetectLanguage:
             return self._heuristic_detect(text)
 
     def _heuristic_detect(self, text: str) -> str:
-        """Fallback rules for very short or ambiguous text."""
-        t = text.lower()
-        if any(w in t for w in self.ITALIAN_WORLDS):
-            return "it"
-        return "unknown"  # Default to unknown
+        """Apply fallback rules to short or ambiguous text."""
+        return "it" if self._italian_heuristic(text) else "unknown"
 
     def __repr__(self):
         return f"DetectLanguage({self.text!r})"
 
     def get(self, lang: str) -> str:
-        """Return the question in the requested language."""
-        if lang not in ("it"):
+        """Return the question in Italian."""
+        if lang != "it":
             raise ValueError("Language must be italian.")
-        return getattr(self, lang)
+        return self.text

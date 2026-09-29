@@ -22,7 +22,9 @@ jobs:
       - name: Install package with dev dependencies
         run: uv sync --locked --extra dev
 
-      - name: Run tests
+      - name: Run tests with branch coverage
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: uv run pytest -m cpu
+        run: |
+          uv run coverage run -m pytest -m cpu
+          uv run coverage report

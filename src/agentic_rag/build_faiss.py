@@ -14,7 +14,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langdetect import detect
 
-from agentic_rag._load_env import DEVICE, ONLINE, cfg, console
+from agentic_rag._load_env import DEVICE, console, hf_hub_cache_for, hf_online_enabled
+from agentic_rag._load_env import cfg as runtime_cfg
 from agentic_rag.config_schema import Config
 from agentic_rag.loggers import Logger
 from agentic_rag.utils import _normalize
@@ -56,12 +57,16 @@ LIST_ITEM_RE = re.compile(
 CONTINUATION_RE = re.compile(r"^(?:\*\*)?(?P<num>\d{1,2})(?:\*\*)?(?:[\.\)]\s|\s(?=[A-Z]|\d))")
 
 
-_SPLITTER = RecursiveCharacterTextSplitter(
-    chunk_size=1500,
-    chunk_overlap=300,
-    separators=["\n", ". ", "? ", "! ", " ", ""],
-    keep_separator="end",
-)
+def _make_splitter(chunk_size: int, chunk_overlap: int) -> RecursiveCharacterTextSplitter:
+    return RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n", ". ", "? ", "! ", " ", ""],
+        keep_separator="end",
+    )
+
+
+_SPLITTER = _make_splitter(runtime_cfg.chunk_size, runtime_cfg.chunk_overlap)
 
 # Splitter that never splits (chunk_size large enough for any section)
 _NOSPLIT_SPLITTER = RecursiveCharacterTextSplitter(
@@ -179,7 +184,10 @@ def _flush_text(
     return carried_heading  # nothing to flush, pass through unchanged
 
 
-def chunk_markdown(md_path: Path) -> list[Document]:
+def chunk_markdown(
+    md_path: Path,
+    splitter: RecursiveCharacterTextSplitter = _SPLITTER,
+) -> list[Document]:
     raw = md_path.read_text(encoding="utf-8")
     doc_lang = _detect_lang_safe(raw)
     chunks: list[Document] = []
@@ -215,7 +223,7 @@ def chunk_markdown(md_path: Path) -> list[Document]:
             continue
         # ─────────────────────────────────────────────────────────────────
 
-        active_splitter = _NOSPLIT_SPLITTER if section_key in NOSPLIT_SECTIONS else _SPLITTER
+        active_splitter = _NOSPLIT_SPLITTER if section_key in NOSPLIT_SECTIONS else splitter
 
         blocks = [b.strip() for b in re.split(r"\n{2,}", section) if b.strip()]
         pending_text: list[str] = []
@@ -422,8 +430,13 @@ def merge_continuation_lists(chunks: list[Document]) -> list[Document]:
 # ------------------------
 # Build FAISS
 # ------------------------
-def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
-    offline = not (ONLINE and getattr(cfg, "online", True))
+def build_embedder(
+    model_name: str,
+    *,
+    online: bool,
+    cache_folder: str,
+) -> HuggingFaceEmbeddings:
+    local_files_only = not hf_online_enabled(online)
 
     return HuggingFaceEmbeddings(
         model_name=model_name,
@@ -431,7 +444,10 @@ def build_embedder(model_name: str) -> HuggingFaceEmbeddings:
         model_kwargs={
             "device": DEVICE,
             "trust_remote_code": True,
-            "local_files_only": offline,
+            "local_files_only": local_files_only,
+            "model_kwargs": {"cache_dir": cache_folder},
+            "processor_kwargs": {"cache_dir": cache_folder},
+            "config_kwargs": {"cache_dir": cache_folder},
         },
     )
 
@@ -445,18 +461,29 @@ def build_faiss_index(cfg: Config) -> None:
     if not md_files:
         raise FileNotFoundError(f"No markdown files found in {cfg.md_dir}")
 
+    splitter = _make_splitter(cfg.chunk_size, cfg.chunk_overlap)
+
     for md_path in md_files:
-        doc_chunks = chunk_markdown(md_path)  # structure-aware chunking
+        doc_chunks = chunk_markdown(md_path, splitter=splitter)  # structure-aware chunking
         all_chunks.extend(doc_chunks)
         logger.debug("%s: %d chunks", md_path.name, len(doc_chunks))
 
     chunks = merge_continuation_lists(all_chunks)
-    chunks = [c for c in chunks if len(c.page_content) > cfg.min_chunk_length]
+    chunks = [c for c in chunks if len(c.page_content) >= cfg.min_chunk_length]
+    if not chunks:
+        raise ValueError(
+            f"No chunks remain after applying min_chunk_length={cfg.min_chunk_length}; "
+            "lower min_chunk_length or check the Markdown content."
+        )
 
     console.print(f"Loaded [bold]{len(md_files)}[/bold] files -> [bold]{len(chunks)}[/bold] chunks.")
     logger.info("Loaded %d files -> %d chunks.", len(md_files), len(chunks))
 
-    embedder = build_embedder(cfg.embed_model)
+    embedder = build_embedder(
+        cfg.embed_model,
+        online=cfg.online,
+        cache_folder=hf_hub_cache_for(cfg.hf_home),
+    )
     vs = FAISS.from_documents(chunks, embedder)
 
     os.makedirs(cfg.index_dir, exist_ok=True)
@@ -465,16 +492,24 @@ def build_faiss_index(cfg: Config) -> None:
     logger.info("Saved FAISS index to %s", cfg.index_dir)
 
 
-def load_vectorstore(index_dir: str, embed_model: str) -> FAISS:
-    embedder = build_embedder(embed_model)
+def load_vectorstore(
+    index_dir: str,
+    embed_model: str,
+    *,
+    online: bool,
+    use_gpu_index: bool,
+    cache_folder: str,
+) -> FAISS:
+    embedder = build_embedder(embed_model, online=online, cache_folder=cache_folder)
     vs = FAISS.load_local(index_dir, embedder, allow_dangerous_deserialization=True)
 
-    if getattr(cfg, "use_gpu_index", False):
+    if use_gpu_index:
         try:
             if faiss.get_num_gpus() > 0:
                 logger.info("FAISS GPU detected: %d GPU(s). Moving loaded index to GPU...", faiss.get_num_gpus())
                 res = faiss.StandardGpuResources()
-                res.setTempMemory(128 * 1024 * 1024)
+                if hasattr(res, "setTempMemory"):
+                    res.setTempMemory(128 * 1024 * 1024)
                 vs.index = faiss.index_cpu_to_gpu(res, 0, vs.index)
             else:
                 logger.warning("No GPU detected by FAISS. Using CPU index.")

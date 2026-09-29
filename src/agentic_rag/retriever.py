@@ -7,24 +7,32 @@ from langchain_core.callbacks.manager import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.vectorstores.base import VectorStoreRetriever
+from pydantic import ConfigDict
 from sentence_transformers import CrossEncoder
 
-from agentic_rag._load_env import DEVICE
+from agentic_rag._load_env import DEVICE, hf_online_enabled
 from agentic_rag.loggers import Logger
 
 logger = Logger.get_logger(__name__)
 
 
-_TABLE_RE = re.compile(r"\btable\s+(\d+)\b", flags=re.IGNORECASE)
+_TABLE_RE = re.compile(r"\b(?:table|tabella)\s+(\d+)\b", flags=re.IGNORECASE)
 
 
 # ------------------------
 # CrossEncoder wrapper for MPS
 # ------------------------
 class MPSSentenceCrossEncoder(BaseCrossEncoder):
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, *, online: bool, cache_folder: str):
         self.device = DEVICE
-        self.model = CrossEncoder(model_name, device=self.device, max_length=2048)
+        self.model = CrossEncoder(
+            model_name,
+            device=self.device,
+            max_length=2048,
+            local_files_only=not hf_online_enabled(online),
+            model_kwargs={"cache_dir": cache_folder},
+            processor_kwargs={"cache_dir": cache_folder},
+        )
 
     def score(self, pairs: list[tuple[str, str]]) -> list[float]:
         scores = self.model.predict(pairs, batch_size=16)
@@ -41,12 +49,15 @@ class ScoredCrossEncoderReranker(CrossEncoderReranker):
         pairs = [(query, doc.page_content) for doc in documents]
         scores = self.model.score(pairs)
 
-        # Attach scores to document metadata
-        for doc, score in zip(documents, scores, strict=False):
-            doc.metadata[self.score_key] = float(score)
+        # FAISS returns references from its shared docstore. Copy before adding
+        # query-specific scores so concurrent requests cannot overwrite metadata.
+        scored_docs = []
+        for doc, score in zip(documents, scores, strict=True):
+            metadata = {**doc.metadata, self.score_key: float(score)}
+            scored_docs.append(Document(page_content=doc.page_content, metadata=metadata, id=doc.id))
 
         # Sort by descending score and keep top_n
-        sorted_docs = sorted(zip(documents, scores, strict=False), key=lambda x: x[1], reverse=True)
+        sorted_docs = sorted(zip(scored_docs, scores, strict=True), key=lambda x: x[1], reverse=True)
         top_docs = [doc for doc, _ in sorted_docs[: self.top_n]]
 
         return top_docs
@@ -68,8 +79,7 @@ class FilterableRerankerRetriever(BaseRetriever):
     fetch_k: int = 80
     lambda_mult: float = 0.3
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def _matches_filter(self, metadata, source_filter: dict | None) -> bool:
         if not source_filter:
@@ -94,11 +104,11 @@ class FilterableRerankerRetriever(BaseRetriever):
         m = _TABLE_RE.search(query)
         if not m:
             return None
-        return f"table {m.group(1)}".lower()
+        return m.group(1)
 
     def _find_table_docs(self, query: str, source_filter: dict | None) -> list[Document]:
-        table_ref = self._extract_table_ref(query)
-        if not table_ref or not source_filter:
+        table_number = self._extract_table_ref(query)
+        if not table_number or not source_filter:
             return []
 
         store = getattr(self.vs.docstore, "_dict", {})
@@ -116,7 +126,8 @@ class FilterableRerankerRetriever(BaseRetriever):
             section = str(md.get("section", "")).lower()
             content = str(doc.page_content).lower()
 
-            if table_ref in section or table_ref in content:
+            references = (*_TABLE_RE.finditer(section), *_TABLE_RE.finditer(content))
+            if any(match.group(1) == table_number for match in references):
                 matches.append(doc)
 
         return matches
@@ -129,10 +140,11 @@ class FilterableRerankerRetriever(BaseRetriever):
         **kwargs,
     ) -> list[Document]:
         source_filter = kwargs.get("filter")
+        effective_fetch_k = max(self.fetch_k, self.k)
 
         logger.debug(
             f"[Retriever] query={query!r} search_type={self.search_type} "
-            f"k={self.k} fetch_k={self.fetch_k} source_filter={source_filter}"
+            f"k={self.k} fetch_k={effective_fetch_k} source_filter={source_filter}"
         )
 
         # 1) Deterministic branch for explicit "Table N" queries inside a known corpus
@@ -145,19 +157,17 @@ class FilterableRerankerRetriever(BaseRetriever):
             return reranked
 
         # 2) Fallback to normal FAISS retrieval
-        search_kwargs = {"k": self.k}
+        search_kwargs = {"k": self.k, "fetch_k": effective_fetch_k}
 
         if source_filter:
             needs_callable = any(isinstance(v, dict) for v in source_filter.values())
             search_kwargs["filter"] = self._build_faiss_filter(source_filter) if needs_callable else source_filter
-            search_kwargs["fetch_k"] = max(self.fetch_k, self.k)
 
         logger.debug(f"[Retriever] FAISS fallback search_kwargs={search_kwargs}")
 
         if self.search_type == "mmr":
             search_kwargs.update(
                 {
-                    "fetch_k": self.fetch_k,
                     "lambda_mult": self.lambda_mult,
                 }
             )
@@ -183,27 +193,32 @@ def build_retriever(
     search_type: str = "similarity",
     fetch_k: int | None = None,
     lambda_mult: float = 0.3,
+    online: bool,
+    cache_folder: str,
 ) -> FilterableRerankerRetriever | VectorStoreRetriever:
+    effective_fetch_k = max(k, fetch_k if fetch_k is not None else max(4 * k, 80))
+
     if rerank_model:
-        cross_encoder = MPSSentenceCrossEncoder(rerank_model)
+        cross_encoder = MPSSentenceCrossEncoder(
+            rerank_model,
+            online=online,
+            cache_folder=cache_folder,
+        )
         compressor = ScoredCrossEncoderReranker(model=cross_encoder, top_n=k_reranked, score_key=score_key)
         return FilterableRerankerRetriever(
             vs=vs,
             k=k,
             compressor=compressor,
             search_type=search_type,
-            fetch_k=fetch_k or max(4 * k, 80),
+            fetch_k=effective_fetch_k,
             lambda_mult=lambda_mult,
         )
 
     # Fallback: no reranker, plain FAISS retriever
+    search_kwargs = {
+        "k": k,
+        "fetch_k": effective_fetch_k,
+    }
     if search_type == "mmr":
-        return vs.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": k,
-                "fetch_k": fetch_k or max(4 * k, 80),
-                "lambda_mult": lambda_mult,
-            },
-        )
-    return vs.as_retriever(search_kwargs={"k": k})
+        search_kwargs["lambda_mult"] = lambda_mult
+    return vs.as_retriever(search_type=search_type, search_kwargs=search_kwargs)

@@ -20,7 +20,6 @@ class Config(BaseModel):
     index_dir: str
 
     reindex: bool
-    workers: int = Field(ge=1)
 
     use_gpu_index: bool
     quantization: bool
@@ -68,6 +67,8 @@ class Config(BaseModel):
             raise ValueError("'k_reranked' must be <= 'k'")
         if self.chunk_overlap >= self.chunk_size:
             raise ValueError("'chunk_overlap' must be < 'chunk_size'")
+        if self.min_chunk_length >= self.chunk_size:
+            raise ValueError("'min_chunk_length' must be < 'chunk_size'")
         return self
 
 

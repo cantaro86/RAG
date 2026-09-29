@@ -10,14 +10,14 @@
 #SBATCH --error=rag.err
 #SBATCH --nodelist=dgx02
 
-module load conda
-eval "$(conda shell.bash hook)"
-conda activate RAG
 set -euo pipefail
+
+module load python3.14
+module load uv
 
 PORT=7860
 NODE="$(hostname -s)"
-USER=$(whoami)
+USER="$(whoami)"
 
 echo "JobID: ${SLURM_JOB_ID}"
 echo "Node:  ${NODE}"
@@ -32,25 +32,22 @@ echo
 echo "3) Open on laptop: http://localhost:7861"
 echo
 
-JOB_SCRIPT=$(scontrol show job ${SLURM_JOB_ID} | awk -F= '/Command=/{print $2}')
-SCRIPT_DIR=$(dirname ${JOB_SCRIPT})
+JOB_SCRIPT="$(scontrol show job "${SLURM_JOB_ID}" | awk -F= '/Command=/{print $2}')"
+SCRIPT_DIR="$(dirname -- "${JOB_SCRIPT}")"
+cd -- "${SCRIPT_DIR}"
 
-export PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH:-}"
-export GRADIO_SERVER_NAME=127.0.0.1
-export GRADIO_SERVER_PORT=$PORT
+export AGENTIC_RAG_MODE="gradio"
+export GRADIO_SERVER_NAME="127.0.0.1"
+export GRADIO_SERVER_PORT="${PORT}"
 
-# Check and set config.yaml parameters
-if ! grep -q "^gradio: true$" ${SCRIPT_DIR}/config.yaml; then
-    sed -i 's/^gradio: .*/gradio: true/' ${SCRIPT_DIR}/config.yaml
-fi
-if ! grep -q "^chat: false$" ${SCRIPT_DIR}/config.yaml; then
-    sed -i 's/^chat: .*/chat: false/' ${SCRIPT_DIR}/config.yaml
-fi
+# Fail before startup if another process already uses the Gradio port.
+python "${SCRIPT_DIR}/scripts/cloudflare_wait.py" "${PORT}" --check-port-free
 
-python -u -m agentic_rag &
+uv run --locked agentic_rag &
 APP_PID=$!
-python "$SCRIPT_DIR/utils/cloudflare_wait.py" "$PORT" &
+# Wait for Gradio readiness, then start and manage the mandatory Cloudflare tunnel.
+python "${SCRIPT_DIR}/scripts/cloudflare_wait.py" "${PORT}" --app-pid "${APP_PID}" &
 TUNNEL_PID=$!
 
-trap 'kill $TUNNEL_PID $APP_PID 2>/dev/null || true' EXIT INT TERM
-wait $APP_PID
+trap 'kill "${TUNNEL_PID}" "${APP_PID}" 2>/dev/null || true' EXIT INT TERM
+wait -n "${APP_PID}" "${TUNNEL_PID}"

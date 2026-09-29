@@ -1,16 +1,58 @@
-import re
-from pathlib import Path
+"""Convert top-level PDF and DOCX files into cleaned Markdown with Docling.
 
-from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
-from docling.document_converter import DocumentConverter, PdfFormatOption
+This is a repository utility, not part of the ``agentic_rag`` runtime package.
+Run it from the repository root so that ``uv`` uses the project's locked
+environment.
+
+Install the optional conversion dependencies first::
+
+    uv sync --locked --extra dev --extra markdown
+
+Convert every ``.pdf`` and ``.docx`` file directly inside an input directory::
+
+    uv run python scripts/build_markdown.py Colon-TC Markdown_IT
+
+Convert only selected files. Relative file names are resolved against the input
+directory; absolute paths are also accepted::
+
+    uv run python scripts/build_markdown.py Colon-TC Markdown_IT --files patient-guide.pdf instructions.docx
+
+Force a supported processing device when Docling's automatic selection is not
+appropriate::
+
+    uv run python scripts/build_markdown.py Colon-TC Markdown_IT --device cpu
+
+The output directory is created when necessary. Each input produces
+``<input-stem>.md`` and replaces an existing file with the same name. Directory
+discovery is non-recursive. Conversion uses accurate table extraction without
+OCR, then removes known PDF glyph, layout, image-placeholder, and newline
+artifacts. Importing this module for its cleaning helpers does not require
+Docling; Docling is loaded only when conversion starts.
+
+The utility can also be used programmatically::
+
+    from scripts.build_markdown import create_markdown_from_pdf
+
+    create_markdown_from_pdf(
+        "Colon-TC",
+        "Markdown_IT",
+        files=["patient-guide.pdf"],
+        device="cpu",
+    )
+"""
+
+import argparse
+import logging
+import re
+from collections.abc import Iterable
+from pathlib import Path
+from types import SimpleNamespace
+
+from rich.console import Console
 from tqdm import tqdm
 
-from agentic_rag._load_env import console
-from agentic_rag.loggers import Logger
-
-logger = Logger.get_logger(__name__)
+logger = logging.getLogger(__name__)
+console = Console()
 
 
 LIGATURE_MAP = {
@@ -39,6 +81,7 @@ HTML_ENTITY_MAP = {
 }
 
 ALL_MAP = {**GLYPH_MAP, **LIGATURE_MAP}
+SUPPORTED_INPUT_SUFFIXES = {".docx", ".pdf"}
 _sorted_tokens = sorted(ALL_MAP.keys(), key=len, reverse=True)
 _glyph_pattern = re.compile("|".join(map(re.escape, _sorted_tokens)))
 _html_pattern = re.compile("|".join(map(re.escape, HTML_ENTITY_MAP.keys())))
@@ -185,7 +228,71 @@ def clean_markdown_artifacts(text: str) -> str:
     return text
 
 
-def find_missing_markdown(pdf_path: str, output_path: str) -> list[Path]:
+def _validate_input_directory(input_dir: Path) -> None:
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
+    if not input_dir.is_dir():
+        raise NotADirectoryError(f"Input path is not a directory: {input_dir}")
+
+
+def _discover_input_files(input_dir: Path) -> list[Path]:
+    return sorted(
+        path for path in input_dir.iterdir() if path.is_file() and path.suffix.lower() in SUPPORTED_INPUT_SUFFIXES
+    )
+
+
+def _normalize_input_files(input_dir: Path, files: Iterable[str | Path] | None) -> list[Path]:
+    if files is None:
+        input_files = _discover_input_files(input_dir)
+    else:
+        raw_files = [files] if isinstance(files, str | Path) else files
+        input_files = []
+        for file in raw_files:
+            path = Path(file)
+            if not path.is_absolute():
+                candidate = input_dir / path
+                if candidate.exists() or not path.exists():
+                    path = candidate
+            input_files.append(path)
+        input_files.sort(key=lambda path: str(path))
+
+    if not input_files:
+        raise ValueError(f"No PDF or DOCX files found in: {input_dir}")
+
+    for input_file in input_files:
+        if input_file.suffix.lower() not in SUPPORTED_INPUT_SUFFIXES:
+            raise ValueError(f"Unsupported input file type: {input_file}")
+        if not input_file.exists():
+            raise FileNotFoundError(f"Input file does not exist: {input_file}")
+        if not input_file.is_file():
+            raise ValueError(f"Input path is not a file: {input_file}")
+
+    return input_files
+
+
+def _load_docling() -> SimpleNamespace:
+    try:
+        from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+    except ImportError as exc:
+        raise ImportError(
+            "Markdown conversion requires Docling. Install it with `uv sync --locked --extra markdown`."
+        ) from exc
+
+    return SimpleNamespace(
+        AcceleratorDevice=AcceleratorDevice,
+        AcceleratorOptions=AcceleratorOptions,
+        DocumentConverter=DocumentConverter,
+        InputFormat=InputFormat,
+        PdfFormatOption=PdfFormatOption,
+        PdfPipelineOptions=PdfPipelineOptions,
+        TableFormerMode=TableFormerMode,
+    )
+
+
+def find_missing_markdown(pdf_path: str | Path, output_path: str | Path) -> list[Path]:
     """
     Check which PDF/DOCX files in pdf_path don't have corresponding .md files in output_path.
 
@@ -198,9 +305,9 @@ def find_missing_markdown(pdf_path: str, output_path: str) -> list[Path]:
     """
     input_dir = Path(pdf_path)
     output_dir = Path(output_path)
+    _validate_input_directory(input_dir)
 
-    # Supported input formats
-    input_files = list(input_dir.glob("*.pdf")) + list(input_dir.glob("*.docx"))
+    input_files = _discover_input_files(input_dir)
 
     missing = []
 
@@ -215,36 +322,38 @@ def find_missing_markdown(pdf_path: str, output_path: str) -> list[Path]:
 
 
 def create_markdown_from_pdf(
-    pdf_path: str,
-    output_path: str,
-    files: list[str] | None = None,
+    pdf_path: str | Path,
+    output_path: str | Path,
+    files: Iterable[str | Path] | None = None,
+    device: str | None = None,
 ) -> None:
-    """Convert a PDF to cleaned markdown using docling."""
+    """Convert PDF and DOCX files to cleaned Markdown using Docling."""
 
-    INPUT_FOLDER = Path(pdf_path)
-    OUTPUT_FOLDER = Path(output_path)
-    OUTPUT_FOLDER.mkdir(exist_ok=True)
+    input_folder = Path(pdf_path)
+    output_folder = Path(output_path)
+    _validate_input_directory(input_folder)
+    input_files = _normalize_input_files(input_folder, files)
+    output_folder.mkdir(parents=True, exist_ok=True)
+
+    docling = _load_docling()
 
     logger.info(f"Processing PDF files: {pdf_path}")
 
-    pipeline_options = PdfPipelineOptions(
+    pipeline_options = docling.PdfPipelineOptions(
         do_table_structure=True,
         do_ocr=False,
     )
-    pipeline_options.table_structure_options.mode = TableFormerMode.ACCURATE
+    pipeline_options.table_structure_options.mode = docling.TableFormerMode.ACCURATE
     pipeline_options.table_structure_options.do_cell_matching = False
 
-    pipeline_options.accelerator_options = AcceleratorOptions(
+    pipeline_options.accelerator_options = docling.AcceleratorOptions(
         num_threads=4,
-        device=AcceleratorDevice.CUDA,
+        device=docling.AcceleratorDevice.AUTO if device is None else device,
     )
 
-    converter = DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)})
-
-    if files is not None:
-        input_files = files
-    else:
-        input_files = list(INPUT_FOLDER.glob("*.pdf")) + list(INPUT_FOLDER.glob("*.docx"))
+    converter = docling.DocumentConverter(
+        format_options={docling.InputFormat.PDF: docling.PdfFormatOption(pipeline_options=pipeline_options)}
+    )
 
     for doc_path in tqdm(sorted(input_files), desc=f"Processing PDFs in {pdf_path}"):
         logger.info(f"Processing: {doc_path.name}")
@@ -256,9 +365,40 @@ def create_markdown_from_pdf(
         markdown_text = clean_markdown_artifacts(markdown_text)
         markdown_text = clean_newlines(markdown_text)
 
-        out_path = OUTPUT_FOLDER / f"{doc_path.stem}.md"
+        out_path = output_folder / f"{doc_path.stem}.md"
         out_path.write_text(markdown_text, encoding="utf-8")
         logger.info(f"  -> Saved: {out_path}")
 
     console.print("\nMarkdown creation done.")
     logger.info(f"Saved cleaned markdown to: {output_path}")
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("input_dir", type=Path, help="Directory containing top-level PDF and DOCX files.")
+    parser.add_argument("output_dir", type=Path, help="Directory where generated Markdown files are written.")
+    parser.add_argument(
+        "--files",
+        nargs="+",
+        help="Optional input file names or paths. By default, every supported file in input_dir is converted.",
+    )
+    parser.add_argument(
+        "--device",
+        choices=("auto", "cpu", "cuda", "mps"),
+        help="Docling accelerator device. By default, Docling selects the device automatically.",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    create_markdown_from_pdf(
+        args.input_dir,
+        args.output_dir,
+        files=args.files,
+        device=args.device,
+    )
+
+
+if __name__ == "__main__":
+    main()

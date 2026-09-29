@@ -1,9 +1,14 @@
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, Required, TypedDict
 
 from langchain_core.documents import Document
 
 
-class GraphState(TypedDict):
+class HistoryMessage(TypedDict):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class GraphState(TypedDict, total=False):
     """
     Represents the state of our graph.
 
@@ -13,12 +18,15 @@ class GraphState(TypedDict):
         documents: list of documents
     """
 
-    question: str
+    question: Required[str]
+    original_question: str
     documents: list[Document]
     rewrite_count: int
-    history: list[dict]
+    history: list[HistoryMessage]
     first_question: bool
-    generation: NotRequired[str]
-    topic_status: NotRequired[Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC", "STESSO", "NUOVO"]]
-    has_docs: NotRequired[bool]
-    guardrail_status: NotRequired[Literal["SALUTO", "GRAZIE", "OFF_TOPIC", "ON_TOPIC"]]
+    generation: str | None
+    source_filter: dict[str, str] | None
+    topic_status: Literal["SAME", "NEW", "SAME_TOPIC", "NEW_TOPIC", "STESSO", "NUOVO"] | None
+    has_docs: bool
+    social_intent: Literal["SALUTO", "GRAZIE", "DOMANDA"] | None
+    guardrail_status: Literal["OFF_TOPIC", "ON_TOPIC"] | None

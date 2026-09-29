@@ -14,6 +14,14 @@
 
 
 
+### HF TOKEN
+
+Create a file called `.env` in the root path of the project with inside:
+```
+HF_TOKEN="hf_your_hugging_face_token"
+```
+
+
 ### Installation (recommended)
 
 Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependencies and virtual environments:
@@ -21,10 +29,9 @@ Alternatively, you can use [uv](https://docs.astral.sh/uv/) to manage dependenci
 ```bash
 module load python3.14
 module load uv
-
-uv sync
-# or
-uv sync --group dev
+uv sync --locked
+# or, for development
+uv sync --locked --extra dev
 ```
 
 If you want to specify the Python version and the environment name (Not recommended):
@@ -33,10 +40,73 @@ If you want to specify the Python version and the environment name (Not recommen
 uv venv --prompt RAG ./uv-venv --python 3.14
 source ./uv-venv/bin/activate
 uv run --active which python
-uv run --active sync
+uv sync --active --locked --extra dev
 # or
 uv pip install -e .
 ```
+
+
+### Tests and coverage
+
+Run the CPU test suite from the repository root:
+
+```bash
+uv run pytest -m cpu
+```
+
+To run a specific test file, append its path, for example:
+
+```bash
+uv run pytest -m cpu tests/test_guardrail.py
+```
+
+The `gpu` marker selects every model-backed GPU test. On a local Apple Silicon Mac, MPS is selected automatically and no Slurm allocation is needed:
+
+```bash
+uv run pytest -m gpu
+```
+
+On the DGX cluster, first allocate an interactive GPU node:
+
+```bash
+salloc --job-name="gpu-tests" --nodes=1 --ntasks-per-node=1 --cpus-per-task=2 --gpus-per-node=1 --time=01:45:00 --qos=normal
+```
+
+Then run the same GPU suite inside the allocation:
+
+```bash
+uv run pytest -m gpu
+```
+
+Run the CPU tests with branch coverage and display the source-only report:
+
+```bash
+uv run coverage erase
+uv run coverage run -m pytest -m cpu
+uv run coverage report
+```
+
+To measure combined CPU and GPU coverage, run both selections into the same coverage data file. Run these commands directly on a local Apple Silicon Mac, or inside the GPU allocation on the DGX cluster:
+
+```bash
+uv run coverage erase
+uv run coverage run -m pytest -m cpu
+uv run coverage run --append -m pytest -m gpu
+uv run coverage report
+```
+
+Coverage is configured in `pyproject.toml` for `src/agentic_rag` and must remain at or above 85%.
+
+
+### RAGAS evaluation
+
+Evaluation questions, the independent judge configuration, Slurm instructions, and artifact documentation are in [`evaluation/README.md`](evaluation/README.md). Input validation is safe on a login node and does not load any model:
+
+```bash
+uv run python -m evaluation validate
+```
+
+Run collection and scoring only after allocating a GPU node, or submit `ragas_evaluation.sbatch`.
 
 
 ### Run the program
@@ -71,7 +141,7 @@ PYTHONPATH=src python -m agentic_rag
 ```
 
 
-### Legacy installation instructions:
+### Pip compatibility
 
 Virtual environment:
 ```bash
@@ -80,13 +150,35 @@ python -m venv --prompt RAG ./python-venv
 source ./python-venv/bin/activate
 ```
 
-Install the package:
+Install the locked export, which includes this project and the development dependencies:
 ```bash
 python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
 
+Alternatively, let pip resolve dependencies directly from `pyproject.toml`:
+
+```bash
 python -m pip install -e .
 # or for developers
 python -m pip install -e ".[dev]"
+```
+
+`requirements.txt` is generated from `uv.lock` for Linux x86_64 and macOS 14+ ARM64. Hashes are omitted so pip can install the editable project entry. Regenerate it only after changing the lockfile:
+
+```bash
+uv export --locked --extra dev --no-hashes --output-file requirements.txt
+```
+
+
+### Conda compatibility
+
+`environment.yml` is a platform-neutral Conda-forge bootstrap for those targets. It installs Python 3.14 and `uv`; `uv` then creates the same locked project environment used by the recommended installation:
+
+```bash
+conda env create -f environment.yml
+conda activate RAG
+uv sync --locked --extra dev
 ```
 
 
@@ -111,22 +203,100 @@ spack spec py-agentic-rag +cuda cuda_arch=90
 
 
 
-#### Debugging
+### Debugging
+
+`debugpy` is included in the development dependencies. The following command starts the application under the debugger and waits for a client before running any application code.
+
+With a Conda environment where the project and `debugpy` are installed directly, request the allocation and run:
 
 ```bash
 module load conda
 salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=4 --gpus-per-node=1 --time=08:45:00 --nodelist=dgx01 --qos=mira
 conda activate RAG
-python -m debugpy --listen 0.0.0.0:5643 --wait-for-client main.py
+python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m agentic_rag
 ```
 
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+No `uv` command is needed in that case. However, the current `environment.yml` installs only Python and `uv`; it does not install the project into the Conda environment. If `RAG` was created from that file, follow the `uv` workflow below after activating it.
 
-In another terminal
+With `uv`, first ensure that the development dependencies are installed, then request the allocation and use `uv run`:
+
+```bash
+module load python3.14
+module load uv
+uv sync --locked --extra dev
+salloc --job-name="rag" --nodes=1 --ntasks-per-node=1 --cpus-per-task=4 --gpus-per-node=1 --time=08:45:00 --nodelist=dgx01 --qos=mira
+uv run python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m agentic_rag
+
+# Debug evaluation collection (GPU node)
+uv run python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m evaluation collect --limit 1
+
+# Debug evaluation scoring (GPU node; requires the evaluation extra)
+uv run --extra evaluation python -m debugpy --listen 0.0.0.0:5643 --wait-for-client -m evaluation score evaluation/results/<run-id> --limit 1
+```
+
+The other evaluation commands use the same pattern: replace `collect --limit 1` with `validate` or `export-excel` and its required arguments. Run only one debugger command at a time because they all listen on port `5643`.
+
+If needed, set the CUDA allocator option before starting the application:
+
+```bash
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+```
+
+In another terminal, forward the debugger port from the allocated node. Keep this connection open while debugging:
 
 ```bash
 ssh -N -L 5643:dgx01:5643 dgx01
 ```
+
+Then attach the IDE to `localhost:5643`. For example, a VS Code `launch.json` entry is:
+
+```json
+{
+  "name": "Attach to agentic_rag",
+  "type": "debugpy",
+  "request": "attach",
+  "connect": {
+    "host": "localhost",
+    "port": 5643
+  },
+  "justMyCode": false
+}
+```
+
+#### Attaching at a specific point
+
+`attach_debugger_if_requested()` from `src/agentic_rag/_load_env.py` can be called from any application, evaluation, or script code where debugger attachment should become available. Gradio currently calls it after building the RAG agent, but the function itself is not limited to Gradio.
+
+Import and call it at the desired execution point:
+
+```python
+from agentic_rag._load_env import attach_debugger_if_requested
+
+# Code that should run before debugger attachment can go here.
+attach_debugger_if_requested()
+```
+
+Enable the call through `config.yaml`:
+
+```yaml
+debugger: true
+```
+
+Alternatively, enable it for one process without editing the configuration:
+
+```bash
+DEBUG_MODE=1 uv run agentic_rag
+```
+
+Setting `DEBUG_MODE` only has an effect if the selected code path calls `attach_debugger_if_requested()`. For example, the existing call is on the Gradio path, which can be selected for one run with:
+
+```bash
+DEBUG_MODE=1 AGENTIC_RAG_MODE=gradio uv run agentic_rag
+```
+
+When reached, the function listens on `0.0.0.0:5643` and pauses at an `input()` prompt. Create the SSH tunnel shown above, attach the IDE to `localhost:5643`, and then press Enter in the application terminal. Place the call before model construction to debug startup, or after model construction to avoid waiting for models while attached.
+
+Call the function at most once in a process because a second call cannot listen on the same port. It also requires an interactive terminal for the Enter prompt, so the direct `python -m debugpy ... --wait-for-client` approach is more suitable for unattended batch jobs.
 
 
 ![AI AGENT](graph.png)
@@ -137,10 +307,6 @@ ssh -N -L 5643:dgx01:5643 dgx01
 We use faiss-cpu, but if we really want faiss gpu we can:
 conda install -c pytorch -c nvidia faiss-gpu=1.8.0  # H100 compatible
 This one installs numpy-base which is a numpy version 1.26.4 of conda. This may create conflicts.
-
-
-
-pip install -r requirements.txt --no-cache
 
 
 

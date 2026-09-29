@@ -1,0 +1,22 @@
+judge:
+  model: "Qwen/Qwen2.5-32B-Instruct"
+  online: true
+  quantization: false
+  max_new_tokens: 2048
+  temperature: 0.0
+  top_p: 1.0
+  top_k: 50
+  repetition_penalty: 1.0
+  no_repeat_ngram_size: 0
+  max_retries: 1
+
+embeddings:
+  model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+  online: true
+  normalize_embeddings: true
+  batch_size: 32
+
+metrics:
+  - faithfulness
+  - context_utilization
+  - answer_relevancy

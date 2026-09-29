@@ -4,7 +4,8 @@ ignore = E203,
          E302,
          E303,
          E704,
-         E305
+         E305,
+         W503
 ; too many leading #
 ; 	E203,  # E203: whitespace before ':'
 ; 	W503  # W503: line break before binary operator

@@ -22,7 +22,6 @@ def make_valid_config() -> dict:
         "dizionario_path": "./dizionario.xlsx",
         "index_dir": "./faiss_index",
         "reindex": False,
-        "workers": 8,
         "use_gpu_index": False,
         "quantization": False,
         "embed_model": "BAAI/bge-m3",
