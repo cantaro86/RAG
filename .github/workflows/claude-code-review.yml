@@ -10,8 +10,15 @@ on:
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
 
+# A newer push cancels the review still running for the same PR
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
+    # Skip drafts: push freely to a draft PR, then mark it ready to get one review
+    if: github.event.pull_request.draft == false
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -49,8 +56,19 @@ jobs:
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
           plugins: 'code-review@claude-code-plugins'
           prompt: '/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
+          # Token budget: Sonnet at medium effort, and force the plugin's subagents
+          # (which otherwise run its bug-hunting agents on Opus) onto Sonnet as well.
+          settings: |
+            {
+              "env": {
+                "CLAUDE_CODE_EFFORT_LEVEL": "medium",
+                "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet",
+                "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": "1"
+              }
+            }
           # Lines starting with '#' inside claude_args are stripped by the action.
           claude_args: |
+            --model sonnet
             --allowedTools
             # Post inline review comments
             "mcp__github_inline_comment__create_inline_comment"
