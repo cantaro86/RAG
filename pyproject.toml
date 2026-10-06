@@ -25,6 +25,7 @@ dependencies = [
     "numpy>=2.4.0",
     "openpyxl",
     "pandas",
+    "pydantic>=2",
     "python-dotenv",
     "pyyaml",
     "rich",
