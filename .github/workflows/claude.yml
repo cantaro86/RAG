@@ -58,7 +58,16 @@ jobs:
           # Lines starting with '#' inside claude_args are stripped by the action.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
+          # Token budget: Sonnet at medium effort for the session and any subagents.
+          settings: |
+            {
+              "env": {
+                "CLAUDE_CODE_EFFORT_LEVEL": "medium",
+                "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+              }
+            }
           claude_args: |
+            --model sonnet
             --allowedTools
             # Tests and coverage
             "Bash(uv run pytest:*)"

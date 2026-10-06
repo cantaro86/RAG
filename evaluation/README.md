@@ -29,7 +29,7 @@ uv sync --locked --extra dev --extra evaluation
 Run the repository-only evaluation tests explicitly with:
 
 ```bash
-uv run --extra evaluation pytest -m evaluation tests/test_evaluation.py tests/test_excel_export.py
+uv run --extra evaluation pytest -m evaluation
 ```
 
 These tests use mocked models and are intentionally excluded from the CI `cpu` selection.
