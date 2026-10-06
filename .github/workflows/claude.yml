@@ -28,7 +28,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
+          fetch-depth: 0 # setuptools-scm needs tags; also enables git log/blame
+
+      # Same environment as test.yml so Claude can run tests, lint and format
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          python-version: "3.14"
+          enable-cache: true
+
+      - name: Install package with dev dependencies
+        run: uv sync --locked --extra dev
 
       - name: Run Claude Code
         id: claude
@@ -43,7 +53,31 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
+          # Tools added on top of the action defaults (Read/Glob/Grep, file edits, git add/commit/push).
+          # Commands mirror AGENTS.md; `uv sync` is pinned to --locked so uv.lock is never rewritten.
+          # Lines starting with '#' inside claude_args are stripped by the action.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-          # claude_args: '--allowed-tools Bash(gh pr *)'
+          claude_args: |
+            --allowedTools
+            # Tests and coverage
+            "Bash(uv run pytest:*)"
+            "Bash(uv run coverage:*)"
+            # Lint and format (pre-commit runs ruff --fix and ruff format)
+            "Bash(uvx pre-commit run:*)"
+            "Bash(uv run ruff check:*)"
+            "Bash(uv run ruff format:*)"
+            # Environment and packaging
+            "Bash(uv sync --locked:*)"
+            "Bash(uv build:*)"
+            "Bash(uvx twine check:*)"
+            # Read-only git and GitHub inspection
+            "Bash(git status:*)"
+            "Bash(git diff:*)"
+            "Bash(git log:*)"
+            "Bash(git show:*)"
+            "Bash(git blame:*)"
+            "Bash(gh pr view:*)"
+            "Bash(gh pr diff:*)"
+            "Bash(gh pr checks:*)"
+            "Bash(gh issue view:*)"
