@@ -20,6 +20,7 @@ class GraphState(TypedDict, total=False):
 
     question: Required[str]
     original_question: str
+    standalone_question: str
     documents: list[Document]
     rewrite_count: int
     history: list[HistoryMessage]

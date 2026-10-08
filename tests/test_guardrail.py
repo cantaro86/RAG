@@ -99,6 +99,24 @@ def test_graph_routing_on_topic(mock_ctx, config_data):
     assert result["generation"] == "Mocked RAG response"
 
 
+def test_graph_generates_with_sanitized_question_after_retrieval_retry(mock_ctx, config_data):
+    """Verify query expansion does not replace the question sent to the answer model."""
+    mock_ctx.retriever.invoke.side_effect = [[], mock_ctx.retriever.invoke.return_value]
+    mock_ctx.question_transformer.invoke.return_value = "query ottimizzata per il recupero"
+    agent = build_agent_graph(mock_ctx, config_data)
+
+    result = agent.invoke(
+        {"question": "domanda originale"},
+        config={"configurable": {"thread_id": "retrieval-retry-question"}},
+    )
+
+    assert result["question"] == "query ottimizzata per il recupero"
+    assert result["standalone_question"] == "Sanitized query"
+    assert [call_args.args[0]["question"] for call_args in mock_ctx.rag_chain.invoke.call_args_list] == [
+        "Sanitized query"
+    ]
+
+
 def test_guardrail_branch_resets_transient_state_and_preserves_history(mock_ctx, config_data):
     """Verify guardrail branch resets transient state and preserves history."""
     agent = build_agent_graph(mock_ctx, config_data)
@@ -192,6 +210,10 @@ def test_compiled_graph_rewrites_same_topic_followup_with_checkpoint_history(moc
         {"role": "assistant", "content": "risposta uno"},
         {"role": "user", "content": "seconda sanitizzata"},
         {"role": "assistant", "content": "risposta due"},
+    ]
+    assert [call_args.args[0]["question"] for call_args in mock_ctx.rag_chain.invoke.call_args_list] == [
+        "prima sanitizzata",
+        "seconda autonoma",
     ]
 
 

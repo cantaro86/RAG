@@ -89,6 +89,7 @@ def sanitize_question(state: GraphState, sanitizer_chain):
         **state,
         "question": sanitized,
         "original_question": sanitized,
+        "standalone_question": sanitized,
         "documents": [],
         "rewrite_count": 0,
         "first_question": False,
@@ -211,7 +212,7 @@ def pre_retrieval_rewriter(state, pre_retrieval_question_rewriter, max_history_t
     rewritten = pre_retrieval_question_rewriter.invoke({"question": question, "history": hist})
     logger.debug(f"Pre-retrieval rewritten question: {rewritten}")
 
-    return {**state, "question": rewritten}
+    return {**state, "question": rewritten, "standalone_question": rewritten}
 
 
 def retrieve_and_filter(state, retriever, threshold: float, rerank: bool):
@@ -279,7 +280,7 @@ def generate_with_docs(state, rag_chain):
     """
 
     logger.debug("---GENERATE WITH DOCS---")
-    q = state["question"]
+    q = state.get("standalone_question", state["question"])
     docs = state.get("documents", [])
     rendered_docs = render_context(docs)
 
